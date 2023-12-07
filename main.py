@@ -5,9 +5,10 @@ from pygame.locals import QUIT
 
 pygame.init()
 
-DISPLAYSURF = pygame.display.set_mode((400, 300), pygame.RESIZABLE)
+DISPLAYSURF = pygame.display.set_mode((400, 300), pygame.SCALED, pygame.RESIZABLE)
 pygame.display.set_caption('NEA')
 font = pygame.font.Font(None, 32)
+isFullscreen = False
 displayAudioError = False
 audioMessagePressed = False
 try:
@@ -21,7 +22,7 @@ menu = 'main'
 volume = 100
 mouseNotUp = False
 
-def button(text, position, size, colour, action=None, actionParameters=None):
+def button(text, position, size, colour, action=None, actionParameters1=None, actionPerameters2=None):
   global mouseNotUp
   button_rect = pygame.Rect(position[0] - (size[0]/2), position[1] - (size[1]/2), size[0], size[1])
   pygame.draw.rect(DISPLAYSURF, colour, button_rect)
@@ -29,8 +30,10 @@ def button(text, position, size, colour, action=None, actionParameters=None):
   textRect = text.get_rect(center=button_rect.center)
   DISPLAYSURF.blit(text, textRect)
   if button_rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0] and mouseNotUp == False and action != None:
-    if actionParameters != None:
-      action(actionParameters)
+    if actionParameters1 != None and actionPerameters2 != None:
+      action(actionParameters1, actionPerameters2)
+    elif actionParameters1 != None:
+      action(actionParameters1)
     else:
       action()
     mouseNotUp = True
@@ -46,6 +49,16 @@ def changeVolume():
     volume = 0
   pygame.mixer.music.set_volume(volume / 100)
 
+def toggleFullscreen():
+  global isFullscreen
+  if isFullscreen == False:
+    pygame.display.set_mode((pygame.display.list_modes()[0][0], pygame.display.list_modes()[0][1]))
+    pygame.display.toggle_fullscreen()
+    isFullscreen = True
+  else:
+    pygame.display.set_mode((400, 300), pygame.SCALED, pygame.RESIZABLE)
+    pygame.display.toggle_fullscreen()
+    isFullscreen = False
 
 def mainMenu(menu):
   global volume
@@ -61,7 +74,7 @@ def mainMenu(menu):
     button('Leaderboard', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100))
     button('Quit', (menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100), pygame.quit)
   if menu == 'settings':
-    button('Fullscreen', (menuNameTextRect.centerx, menuNameTextRect.centery + 50), (150, 37.5), (100, 100, 100), pygame.display.toggle_fullscreen)
+    button('Fullscreen', (menuNameTextRect.centerx, menuNameTextRect.centery + 50), (150, 37.5), (100, 100, 100), toggleFullscreen)
     if not displayAudioError:
       button(f'volume: {volume}%' , (menuNameTextRect.centerx, menuNameTextRect.centery + 100), (150, 37.5), (100, 100, 100), changeVolume)
       button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100), menuEquals, 'main')
@@ -88,4 +101,4 @@ while True:
     if pygame.mouse.get_pressed()[0] and audioErrorTextRect.collidepoint(pygame.mouse.get_pos()):
       audioMessagePressed = True
   
-  pygame.display.update() 
+  pygame.display.update()
