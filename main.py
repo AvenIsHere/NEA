@@ -62,24 +62,28 @@ def toggleFullscreen():
 
 def mainMenu(menu):
   global volume
-  if menu == 'main':
+  if menu == 'main' or menu == 'play':
     menuNameText = font.render("Game Name", True, (255, 255, 255))
   elif menu == 'settings':
     menuNameText = font.render("Settings", True, (255, 255, 255))
   menuNameTextRect = menuNameText.get_rect(center=(DISPLAYSURF.get_width() / 2, DISPLAYSURF.get_height() / 6))
   DISPLAYSURF.blit(menuNameText, menuNameTextRect)
   if menu == 'main':
-    button('Play', (menuNameTextRect.centerx, menuNameTextRect.centery + 50), (150, 37.5), (100, 100, 100))
-    button('Settings', (menuNameTextRect.centerx, menuNameTextRect.centery + 100), (150, 37.5), (100, 100, 100), menuEquals, 'settings')
-    button('Leaderboard', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100))
-    button('Quit', (menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100), pygame.quit)
+    buttonsList = [['Play', menuEquals, 'play'], ['Settings', menuEquals, 'settings'], ['Quit', pygame.quit]]
   if menu == 'settings':
-    button('Fullscreen', (menuNameTextRect.centerx, menuNameTextRect.centery + 50), (150, 37.5), (100, 100, 100), toggleFullscreen)
     if not displayAudioError:
-      button(f'volume: {volume}%' , (menuNameTextRect.centerx, menuNameTextRect.centery + 100), (150, 37.5), (100, 100, 100), changeVolume)
-      button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100), menuEquals, 'main')
+      buttonsList = [['Fullscreen', toggleFullscreen], [f'Volume: {volume}%', changeVolume]]
     else:
-      button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 100), (150, 37.5), (100, 100, 100), menuEquals, 'main')
+      buttonsList = [['Fullscreen', toggleFullscreen]]
+  if menu == 'play':
+    buttonsList = [['New Game', menuEquals, 'new'], ['Load Game', menuEquals, 'load']]
+  if menu !="main":
+      button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100), menuEquals, 'main')
+  for i in range(len(buttonsList)):
+    try:
+      button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1], buttonsList[i][2])
+    except:
+      button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1])
 
 
 while True:
