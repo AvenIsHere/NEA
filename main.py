@@ -5,7 +5,7 @@ from pygame.locals import QUIT
 
 pygame.init()
 
-DISPLAYSURF = pygame.display.set_mode((400, 300), pygame.SCALED, pygame.RESIZABLE)
+DISPLAYSURF = pygame.display.set_mode((400, 300), pygame.RESIZABLE)
 pygame.display.set_caption('NEA')
 font = pygame.font.Font(None, 32)
 isFullscreen = False
@@ -56,8 +56,8 @@ def toggleFullscreen():
     pygame.display.toggle_fullscreen()
     isFullscreen = True
   else:
-    pygame.display.set_mode((400, 300), pygame.SCALED, pygame.RESIZABLE)
     pygame.display.toggle_fullscreen()
+    pygame.display.set_mode((400, 300), pygame.RESIZABLE)
     isFullscreen = False
 
 def mainMenu(menu):
