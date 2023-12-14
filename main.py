@@ -165,9 +165,8 @@ while True:
         ButtonsListOffset += event.y * 10
         if ButtonsListOffset > 0:
           ButtonsListOffset = 0
-        if ButtonsListOffset < -((len(buttonsList) - 1) * 50):
-          ButtonsListOffset = -((len(buttonsList) - 1) * 50)
-
+        if menuNameTextRect.centery + ButtonsListOffset + (50 + ((len(buttonsList) -1) * 50)) + 30 < DISPLAYSURF.get_height():
+          ButtonsListOffset -= event.y * 10
   DISPLAYSURF.fill((20,20,20))
 
   mainMenu(menu)
