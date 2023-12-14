@@ -3,6 +3,8 @@ import sys
 import pygame
 from pygame.locals import QUIT
 import os
+import tkinter
+tkinter._test()
 
 pygame.init()
 
@@ -24,6 +26,7 @@ if os.path.isdir('gamesaves'):
   print(gameSaves)
 else:
   os.mkdir('gamesaves')
+  gameSaves = os.listdir('gamesaves')
 
 menu = 'main'
 volume = 100
@@ -120,7 +123,6 @@ def mainMenu(menu):
         button(buttonsList[i][0], (menuNameTextRect.centerx, menuNameTextRect.centery + (50 + (i * 50))), (150, 37.5),(100, 100, 100))
     except TypeError:
       pass
-
 
 while True:
   pygame.display.update()
