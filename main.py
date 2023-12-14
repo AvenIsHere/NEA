@@ -165,7 +165,8 @@ while True:
         ButtonsListOffset += event.y * 10
         if ButtonsListOffset > 0:
           ButtonsListOffset = 0
-        if ButtonsListOffset <
+        if ButtonsListOffset < -((len(buttonsList) - 1) * 50):
+          ButtonsListOffset = -((len(buttonsList) - 1) * 50)
 
   DISPLAYSURF.fill((20,20,20))
 
