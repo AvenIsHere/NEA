@@ -102,6 +102,7 @@ def loadFile(file):
   print(f'load {file}')
 
 def mainMenu(menu):
+  global menuNameTextRect
   global volume
   global buttonsList
   if menu == 'main' or menu == 'play':
@@ -140,6 +141,8 @@ def mainMenu(menu):
       button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1])
     elif len(buttonsList[i]) == 3:
       button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1], buttonsList[i][2])
+  TextBackground = pygame.Rect(0, 0, DISPLAYSURF.get_width(), menuNameTextRect.centery + 15)
+  pygame.draw.rect(DISPLAYSURF, (20, 20, 20), TextBackground)
   DISPLAYSURF.blit(menuNameText, menuNameTextRect)
 
 
@@ -158,12 +161,11 @@ while True:
         else:
           typedText += event.unicode
     if event.type == pygame.MOUSEWHEEL:
-      if menu == 'play' and len(buttonsList) > 4:
+      if menu == 'play' and menuNameTextRect.centery + (50 + ((len(buttonsList) - 1) * 50)) > DISPLAYSURF.get_height():
         ButtonsListOffset += event.y * 10
         if ButtonsListOffset > 0:
           ButtonsListOffset = 0
-        if ButtonsListOffset < -((len(buttonsList) - 4) * 50):
-          ButtonsListOffset = -((len(buttonsList) - 4) * 50)
+        if ButtonsListOffset <
 
   DISPLAYSURF.fill((20,20,20))
 
