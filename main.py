@@ -26,6 +26,7 @@ else:
   os.mkdir('gamesaves')
 
 menu = 'main'
+ButtonsListOffset = 0
 volume = 100
 mouseNotUp = False
 
@@ -41,17 +42,15 @@ def button(text, position, size, colour, action=None, *args):
     mouseNotUp = True
 
 def menuEquals(menu_set):
-  global fileName
   global menu
   global difficulty
+  global typedText
+  global ButtonsListOffset
   menu = menu_set
-  if menu == 'play':
-    try:
-      fileName = f'game{len(os.listdir(gamesaves))+1}'
-      difficulty = 'Easy'
-    except:
-      fileName = 'game0'
-      difficulty = 'Easy'
+  if menu == 'new':
+    difficulty = 'Easy'
+    typedText = ''
+  ButtonsListOffset = 0
 
 def changeVolume():
   global volume
@@ -71,18 +70,40 @@ def toggleFullscreen():
     pygame.display.set_mode((400, 300), pygame.RESIZABLE)
     isFullscreen = False
 
-def setDifficulty(file):
+def drawTextBox(text, position, size, colour, borderColour, borderSize, typedText):
+  if typedText == '':
+    text = font.render(text, True, (0, 0, 0))
+    textRect = text.get_rect(center=position)
+  if typedText != '':
+    text = font.render(typedText, True, (0, 0, 0))
+    textRect = text.get_rect(center=position)
+  pygame.draw.rect(DISPLAYSURF, colour, textRect)
+  pygame.draw.rect(DISPLAYSURF, borderColour, (textRect.x - borderSize, textRect.y - borderSize, textRect.width + borderSize * 2, textRect.height + borderSize * 2), borderSize)
+  DISPLAYSURF.blit(text, textRect)
+
+def setDifficulty():
   global difficulty
-  if difficulty == 'Easy':
-    difficulty = "Medium"
-  elif difficulty == 'Medium':
-    difficulty = "Difficult"
-  elif difficulty == 'Difficult':
-    difficulty = 'Very difficult'
-  else:
-    difficulty = 'Easy'
+  difficulties = {
+  'Easy': 'Medium',
+  'Medium': 'Difficult',
+  'Difficult': 'Very difficult',
+  'Very difficult': 'Easy'
+  }
+  difficulty = difficulties.get(difficulty, 'Easy')
+
+def createGame():
+  global fileName
+  global difficulty
+  global gameSaves
+  file = open(f'gamesaves/{typedText}.txt', 'w')
+  file.write(f'Difficulty: {difficulty}\n')
+
+def loadFile(file):
+  print(f'load {file}')
+
 def mainMenu(menu):
   global volume
+  global buttonsList
   if menu == 'main' or menu == 'play':
     menuNameText = font.render("Game Name", True, (255, 255, 255))
   elif menu == 'settings':
@@ -90,7 +111,6 @@ def mainMenu(menu):
   elif menu == 'new':
     menuNameText = font.render("New Game", True, (255, 255, 255))
   menuNameTextRect = menuNameText.get_rect(center=(DISPLAYSURF.get_width() / 2, DISPLAYSURF.get_height() / 6))
-  DISPLAYSURF.blit(menuNameText, menuNameTextRect)
   if menu == 'main':
     buttonsList = [['Play', menuEquals, 'play'], ['Settings', menuEquals, 'settings'], ['Quit', pygame.quit]]
   elif menu == 'settings':
@@ -100,26 +120,27 @@ def mainMenu(menu):
       buttonsList = [['Fullscreen', toggleFullscreen]]
   elif menu == 'play':
     buttonsList = [['New Game', menuEquals, 'new']]
-    for x in range(len(gameSaves)):
-      buttonsList.append(gameSaves[x])
+    for savefile in gameSaves:
+        buttonsList.append([savefile[:len(savefile)-4], loadFile, savefile])
     if len(buttonsList) < 4:
       button('Back',(menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100), menuEquals, 'main')
     else:
-      buttonsList.append('Back', menuEquals, 'main')
+      buttonsList.append(['Back', menuEquals, 'main'])
   elif menu == 'new':
-    buttonsList = [None, [f'Difficulty: {difficulty}', setDifficulty, fileName], None, ['Back', menuEquals, 'play']]
+    drawTextBox(f'Enter a name for your new game', (menuNameTextRect.centerx, menuNameTextRect.centery + 50), (150, 37.5), (100, 100, 100), (0, 0, 0), 2, typedText)
+    buttonsList = [None, [f'Difficulty: {difficulty}', setDifficulty], ['Start', createGame], ['Back', menuEquals, 'play']]
   if menu !="main" and menu !='play' and menu !='new':
       button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100), menuEquals, 'main')
   for i in range(len(buttonsList)):
-    try:
-      button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1], buttonsList[i][2])
-    except IndexError:
-      try:
-        button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1])
-      except IndexError:
-        button(buttonsList[i][0], (menuNameTextRect.centerx, menuNameTextRect.centery + (50 + (i * 50))), (150, 37.5),(100, 100, 100))
-    except TypeError:
+    if buttonsList[i] == None:
       pass
+    elif len(buttonsList[i]) == 1:
+      button(buttonsList[i][0], (menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))), (150, 37.5),(100, 100, 100))
+    elif len(buttonsList[i]) == 2:
+      button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1])
+    elif len(buttonsList[i]) == 3:
+      button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1], buttonsList[i][2])
+  DISPLAYSURF.blit(menuNameText, menuNameTextRect)
 
 
 while True:
@@ -130,6 +151,19 @@ while True:
       pygame.quit()
     if event.type == pygame.MOUSEBUTTONUP:
       mouseNotUp = False
+    if event.type == pygame.KEYDOWN:
+      if menu == 'new':
+        if event.key == pygame.K_BACKSPACE:
+          typedText = typedText[:-1]
+        else:
+          typedText += event.unicode
+    if event.type == pygame.MOUSEWHEEL:
+      if menu == 'play' and len(buttonsList) > 4:
+        ButtonsListOffset += event.y * 10
+        if ButtonsListOffset > 0:
+          ButtonsListOffset = 0
+        if ButtonsListOffset < -((len(buttonsList) - 4) * 50):
+          ButtonsListOffset = -((len(buttonsList) - 4) * 50)
 
   DISPLAYSURF.fill((20,20,20))
 
@@ -141,3 +175,6 @@ while True:
     DISPLAYSURF.blit(audioErrorText, audioErrorTextRect)
     if pygame.mouse.get_pressed()[0] and audioErrorTextRect.collidepoint(pygame.mouse.get_pos()):
       audioMessagePressed = True
+
+# To do:
+# watch https://www.youtube.com/watch?v=GMBqjxcKogA - video on how to make a menu in pygame
