@@ -6,7 +6,7 @@ import os
 
 pygame.init()
 
-DISPLAYSURF = pygame.display.set_mode((400, 300), pygame.RESIZABLE)
+screen = pygame.display.set_mode((1152, 648), pygame.RESIZABLE)
 pygame.display.set_caption('NEA')
 font = pygame.font.Font(None, 32)
 isFullscreen = False
@@ -25,18 +25,21 @@ if os.path.isdir('gamesaves'):
 else:
   os.mkdir('gamesaves')
 
+loadMenu = True
 menu = 'main'
 ButtonsListOffset = 0
 volume = 100
 mouseNotUp = False
 
+inGame = False
+
 def button(text, position, size, colour, action=None, *args):
   global mouseNotUp
   button_rect = pygame.Rect(position[0] - (size[0]/2), position[1] - (size[1]/2), size[0], size[1])
-  pygame.draw.rect(DISPLAYSURF, colour, button_rect)
+  pygame.draw.rect(screen, colour, button_rect)
   text = font.render(text, True, (0, 0, 0))
   textRect = text.get_rect(center=button_rect.center)
-  DISPLAYSURF.blit(text, textRect)
+  screen.blit(text, textRect)
   if button_rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0] and mouseNotUp == False and action != None:
     action(*args)
     mouseNotUp = True
@@ -77,9 +80,9 @@ def drawTextBox(text, position, size, colour, borderColour, borderSize, typedTex
   if typedText != '':
     text = font.render(typedText, True, (0, 0, 0))
     textRect = text.get_rect(center=position)
-  pygame.draw.rect(DISPLAYSURF, colour, textRect)
-  pygame.draw.rect(DISPLAYSURF, borderColour, (textRect.x - borderSize, textRect.y - borderSize, textRect.width + borderSize * 2, textRect.height + borderSize * 2), borderSize)
-  DISPLAYSURF.blit(text, textRect)
+  pygame.draw.rect(screen, colour, textRect)
+  pygame.draw.rect(screen, borderColour, (textRect.x - borderSize, textRect.y - borderSize, textRect.width + borderSize * 2, textRect.height + borderSize * 2), borderSize)
+  screen.blit(text, textRect)
 
 def setDifficulty():
   global difficulty
@@ -96,10 +99,20 @@ def createGame():
   global difficulty
   global gameSaves
   file = open(f'gamesaves/{typedText}.txt', 'w')
-  file.write(f'Difficulty: {difficulty}\n')
+  file.write(f'Difficulty{difficulty}\n')
+  file.write(f'firstplaythroughTrue\n')
+  for x in range(2):
+    file.write(f'None\n')
 
 def loadFile(file):
+  global inGame
+  global loadMenu
+  global currentFile
+  global currentFile
   print(f'load {file}')
+  inGame = True
+  loadMenu = False
+  currentFile = file
 
 def mainMenu(menu):
   global menuNameTextRect
@@ -111,7 +124,7 @@ def mainMenu(menu):
     menuNameText = font.render("Settings", True, (255, 255, 255))
   elif menu == 'new':
     menuNameText = font.render("New Game", True, (255, 255, 255))
-  menuNameTextRect = menuNameText.get_rect(center=(DISPLAYSURF.get_width() / 2, DISPLAYSURF.get_height() / 6))
+  menuNameTextRect = menuNameText.get_rect(center=(screen.get_width() / 2, screen.get_height() / 6))
   if menu == 'main':
     buttonsList = [['Play', menuEquals, 'play'], ['Settings', menuEquals, 'settings'], ['Quit', pygame.quit]]
   elif menu == 'settings':
@@ -141,10 +154,35 @@ def mainMenu(menu):
       button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1])
     elif len(buttonsList[i]) == 3:
       button(buttonsList[i][0],(menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))), (150, 37.5), (100, 100, 100), buttonsList[i][1], buttonsList[i][2])
-  TextBackground = pygame.Rect(0, 0, DISPLAYSURF.get_width(), menuNameTextRect.centery + 15)
-  pygame.draw.rect(DISPLAYSURF, (20, 20, 20), TextBackground)
-  DISPLAYSURF.blit(menuNameText, menuNameTextRect)
+  TextBackground = pygame.Rect(0, 0, screen.get_width(), menuNameTextRect.centery + 15)
+  pygame.draw.rect(screen, (20, 20, 20), TextBackground)
+  screen.blit(menuNameText, menuNameTextRect)
 
+def playGame(file):
+  global fileLine
+  with open(f"gamesaves/{file}", "r") as f:
+    fileLine = [line.strip() for line in f]
+  if fileLine[1] == "firstplaythroughTrue":
+    playerPosition = (0,0)
+    fileLine[2] = playerPosition
+    map = []
+    for x in range(20):
+      map.append([])
+      for y in range(20):
+        if (x + y) % 2 == 0:
+          map[x].append('blue')
+        else:
+          map[x].append('red')
+    fileLine[3] = map
+    fileLine[1] = 'firstplaythroughFalse'
+  for x, colour in enumerate(map, start=0):
+    for y, tileColour in enumerate(colour, start=0):
+      if tileColour == 'blue':
+        tileRect = pygame.Rect((screen.get_width()/20)*(x),(screen.get_height()/20)*(y),screen.get_width()/20, screen.get_height()/20)
+        pygame.draw.rect(screen, (0,0,255), tileRect)
+      elif tileColour == 'red':
+        tileRect = pygame.Rect((screen.get_width() / 20) * (x), (screen.get_height() / 20) * (y),screen.get_width() / 20, screen.get_height() / 20)
+        pygame.draw.rect(screen, (255, 0, 0), tileRect)
 
 while True:
   pygame.display.update()
@@ -161,20 +199,29 @@ while True:
         else:
           typedText += event.unicode
     if event.type == pygame.MOUSEWHEEL:
-      if menu == 'play' and menuNameTextRect.centery + (50 + ((len(buttonsList) - 1) * 50)) > DISPLAYSURF.get_height():
+      if menu == 'play' and loadMenu == True and menuNameTextRect.centery + (50 + ((len(buttonsList) - 1) * 50)) > screen.get_height():
         ButtonsListOffset += event.y * 10
         if ButtonsListOffset > 0:
           ButtonsListOffset = 0
-        if menuNameTextRect.centery + ButtonsListOffset + (50 + ((len(buttonsList) -1) * 50)) + 30 < DISPLAYSURF.get_height():
+        if menuNameTextRect.centery + ButtonsListOffset + (50 + ((len(buttonsList) -1) * 50)) + 30 < screen.get_height():
           ButtonsListOffset -= event.y * 10
-  DISPLAYSURF.fill((20,20,20))
+    if event.type == pygame.K_ESCAPE:
+      if loadMenu == False and inGame == True:
+        with open(currentFile, 'w') as file:
+          file.writelines(fileLine)
+          pygame.quit()
+  screen.fill((20, 20, 20))
 
-  mainMenu(menu)
+  if loadMenu:
+    mainMenu(menu)
+
+  if inGame:
+    playGame(currentFile)
 
   if displayAudioError == True and audioMessagePressed == False:
     audioErrorText = font.render("Audio Error. Press to dismiss.", True, (255, 0, 0))
-    audioErrorTextRect = audioErrorText.get_rect(center=(DISPLAYSURF.get_width() / 2, DISPLAYSURF.get_height() - 30))
-    DISPLAYSURF.blit(audioErrorText, audioErrorTextRect)
+    audioErrorTextRect = audioErrorText.get_rect(center=(screen.get_width() / 2, screen.get_height() - 30))
+    screen.blit(audioErrorText, audioErrorTextRect)
     if pygame.mouse.get_pressed()[0] and audioErrorTextRect.collidepoint(pygame.mouse.get_pos()):
       audioMessagePressed = True
 
