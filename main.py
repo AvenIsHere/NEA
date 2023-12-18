@@ -94,7 +94,7 @@ def setDifficulty():
   }
   difficulty = difficulties.get(difficulty, 'Easy')
 
-def createGame():
+def createFile():
   global fileName
   global difficulty
   global gameSaves
@@ -144,7 +144,7 @@ def mainMenu(menu):
       buttonsList.append(['Back', menuEquals, 'main'])
   elif menu == 'new':
     drawTextBox(f'Enter a name for your new game', (menuNameTextRect.centerx, menuNameTextRect.centery + 50), (150, 37.5), (100, 100, 100), (0, 0, 0), 2, typedText)
-    buttonsList = [None, [f'Difficulty: {difficulty}', setDifficulty], ['Start', createGame], ['Back', menuEquals, 'play']]
+    buttonsList = [None, [f'Difficulty: {difficulty}', setDifficulty], ['Start', createFile], ['Back', menuEquals, 'play']]
   if menu !="main" and menu !='play' and menu !='new':
       button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100), menuEquals, 'main')
   for i in range(len(buttonsList)):
@@ -165,6 +165,7 @@ def playGame(file):
   global fileLine
   global firstTimeRun
   global map
+  global player
   if firstTimeRun == True:
     with open(f"gamesaves/{file}", "r") as f:
       fileLine = [line.strip() for line in f]
@@ -183,6 +184,9 @@ def playGame(file):
           map[x].append('red')
     fileLine[3] = map
     fileLine[1] = 'firstplaythroughFalse'
+  backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x 208).png')
+  backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
+  screen.blit(backgroundImage,(0,0))
   for x, colour in enumerate(map, start=0):
     for y, tileColour in enumerate(colour, start=0):
       if tileColour == 'blue':
@@ -191,8 +195,26 @@ def playGame(file):
       elif tileColour == 'red':
         tileRect = pygame.Rect((screen.get_width() / 20) * (x) + playerPosition[0], (screen.get_height() / 20) * (y) + playerPosition[1],screen.get_width() / 20, screen.get_height() / 20)
         pygame.draw.rect(screen, (255, 0, 0), tileRect)
+  player = pygame.Rect(screen.get_width()/2 - (screen.get_width()/2)/40, screen.get_height()/2 -(screen.get_height()/2)/40, (screen.get_width()/2)/20, (screen.get_height()/2)/20)
+  pygame.draw.rect(screen, (0,255,0), player)
+
+def jump():
+  global player
+  global jumpCount
+  global playerPosition
+  global jumping
+  if jumpCount >= -10:
+      neg = 1
+      if jumpCount < 0:
+          neg = -1
+      player.top += jumpCount**2 * 0.1 * neg
+      jumpCount -= 1
+  else:
+      jumping = False
+      jumpCount = 10
 
 playerPosition = []
+jumping = False
 
 while True:
   pygame.display.update()
@@ -213,6 +235,9 @@ while True:
           with open(currentFile, 'w') as file:
             file.writelines(str(fileLine))
           pygame.quit()
+        if event.key == pygame.K_SPACE:
+          jumping = True
+          jumpCount = 10
 
     if event.type == pygame.MOUSEWHEEL:
       if menu == 'play' and loadMenu == True and menuNameTextRect.centery + (50 + ((len(buttonsList) - 1) * 50)) > screen.get_height():
@@ -230,14 +255,22 @@ while True:
 
   if inGame:
     playGame(currentFile)
-    if keys[pygame.K_w]:
-      playerPosition[1] += 1
-    if keys[pygame.K_s]:
-      playerPosition[1] -= 1
-    if keys[pygame.K_a]:
-      playerPosition[0] += 1
-    if keys[pygame.K_d]:
-      playerPosition[0] -= 1
+    key = pygame.key.get_pressed()
+    up = key[pygame.K_w] or key[pygame.K_UP]
+    down = key[pygame.K_s] or key[pygame.K_DOWN]
+    left = key[pygame.K_a] or key[pygame.K_LEFT]
+    right = key[pygame.K_d] or key[pygame.K_RIGHT]
+
+    move = pygame.math.Vector2(right - left, down - up)
+    if move.length_squared() > 0:
+        move.scale_to_length(screen.get_width()/1000)
+        playerPosition[0] -= move.x
+        playerPosition[1] -= move.y
+
+    print(player.top)
+
+    if jumping:
+      jump()
 
   if displayAudioError == True and audioMessagePressed == False:
     audioErrorText = font.render("Audio Error. Press to dismiss.", True, (255, 0, 0))
