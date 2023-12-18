@@ -70,7 +70,7 @@ def toggleFullscreen():
     isFullscreen = True
   else:
     pygame.display.toggle_fullscreen()
-    pygame.display.set_mode((400, 300), pygame.RESIZABLE)
+    pygame.display.set_mode((1152, 648), pygame.RESIZABLE)
     isFullscreen = False
 
 def drawTextBox(text, position, size, colour, borderColour, borderSize, typedText):
@@ -109,10 +109,12 @@ def loadFile(file):
   global loadMenu
   global currentFile
   global currentFile
+  global firstTimeRun
   print(f'load {file}')
   inGame = True
   loadMenu = False
   currentFile = file
+  firstTimeRun = True
 
 def mainMenu(menu):
   global menuNameTextRect
@@ -159,11 +161,17 @@ def mainMenu(menu):
   screen.blit(menuNameText, menuNameTextRect)
 
 def playGame(file):
+  global playerPosition
   global fileLine
-  with open(f"gamesaves/{file}", "r") as f:
-    fileLine = [line.strip() for line in f]
+  global firstTimeRun
+  global map
+  if firstTimeRun == True:
+    with open(f"gamesaves/{file}", "r") as f:
+      fileLine = [line.strip() for line in f]
+      firstTimeRun = False
   if fileLine[1] == "firstplaythroughTrue":
-    playerPosition = (0,0)
+    playerPosition = [0,0]
+    print("Oh.")
     fileLine[2] = playerPosition
     map = []
     for x in range(20):
@@ -178,11 +186,13 @@ def playGame(file):
   for x, colour in enumerate(map, start=0):
     for y, tileColour in enumerate(colour, start=0):
       if tileColour == 'blue':
-        tileRect = pygame.Rect((screen.get_width()/20)*(x),(screen.get_height()/20)*(y),screen.get_width()/20, screen.get_height()/20)
+        tileRect = pygame.Rect(((screen.get_width()/20)*(x)) + playerPosition[0],((screen.get_height()/20)*(y)) + playerPosition[1],screen.get_width()/20, screen.get_height()/20)
         pygame.draw.rect(screen, (0,0,255), tileRect)
       elif tileColour == 'red':
-        tileRect = pygame.Rect((screen.get_width() / 20) * (x), (screen.get_height() / 20) * (y),screen.get_width() / 20, screen.get_height() / 20)
+        tileRect = pygame.Rect((screen.get_width() / 20) * (x) + playerPosition[0], (screen.get_height() / 20) * (y) + playerPosition[1],screen.get_width() / 20, screen.get_height() / 20)
         pygame.draw.rect(screen, (255, 0, 0), tileRect)
+
+playerPosition = []
 
 while True:
   pygame.display.update()
@@ -198,6 +208,12 @@ while True:
           typedText = typedText[:-1]
         else:
           typedText += event.unicode
+      if inGame == True:
+        if event.key == pygame.K_ESCAPE:
+          with open(currentFile, 'w') as file:
+            file.writelines(str(fileLine))
+          pygame.quit()
+
     if event.type == pygame.MOUSEWHEEL:
       if menu == 'play' and loadMenu == True and menuNameTextRect.centery + (50 + ((len(buttonsList) - 1) * 50)) > screen.get_height():
         ButtonsListOffset += event.y * 10
@@ -205,18 +221,23 @@ while True:
           ButtonsListOffset = 0
         if menuNameTextRect.centery + ButtonsListOffset + (50 + ((len(buttonsList) -1) * 50)) + 30 < screen.get_height():
           ButtonsListOffset -= event.y * 10
-    if event.type == pygame.K_ESCAPE:
-      if loadMenu == False and inGame == True:
-        with open(currentFile, 'w') as file:
-          file.writelines(fileLine)
-          pygame.quit()
   screen.fill((20, 20, 20))
 
   if loadMenu:
     mainMenu(menu)
 
+  keys = pygame.key.get_pressed()
+
   if inGame:
     playGame(currentFile)
+    if keys[pygame.K_w]:
+      playerPosition[1] += 1
+    if keys[pygame.K_s]:
+      playerPosition[1] -= 1
+    if keys[pygame.K_a]:
+      playerPosition[0] += 1
+    if keys[pygame.K_d]:
+      playerPosition[0] -= 1
 
   if displayAudioError == True and audioMessagePressed == False:
     audioErrorText = font.render("Audio Error. Press to dismiss.", True, (255, 0, 0))
