@@ -1,4 +1,0 @@
-DifficultyEasy
-firstplaythroughTrue
-None
-None
