@@ -279,13 +279,18 @@ while True:
                     typedText += event.unicode
             if inGame == True:
                 if event.key == pygame.K_ESCAPE:
-                    with open(currentFile, 'w') as file:
-                        file.writelines(str(fileLine))
+                    print(currentFile)
+                    for x in range(len(fileLine)):
+                        fileLine[x] = str(fileLine[x]) + "\n"
+                    with open("gamesaves/"+currentFile, 'w') as file:
+                        file.writelines(fileLine)
                     pygame.quit()
                 if event.key == pygame.K_SPACE:
                     if jumping == False:
                         jumping = True
                         jumpCount = 10
+                if event.key == pygame.K_h:
+                    playerPosition = [screen.get_width(), 0]
             if event.key == pygame.K_F11:
                 toggleFullscreen()
 
@@ -316,19 +321,27 @@ while True:
         move = pygame.math.Vector2(right - left, down - up)
         if move.length_squared() > 0:
             move.scale_to_length(screen.get_width() / 1000)
-            playerPosition[0] -= move.x
-            playerPosition[1] -= move.y
+
+            x_adjustment = 0
+            y_adjustment = 0
+
+            next_player_rect = player.move(move.x, move.y)
 
             for x, tileRectRow in enumerate(tileRect):
                 for y, tileRectRowColumn in enumerate(tileRectRow):
-                    if tile[x][y][1] == (255, 0, 0) and player.colliderect(tile[x][y][0]):
-                        playerPosition[0] += move.x
-                        playerPosition[1] += move.y
+                    if next_player_rect.colliderect(tileRect[x][y]) and map[x][y] == 'red':
+                        if move.x > 0:  # moving right
+                            move.x = 0
+                        elif move.x < 0:  # moving left
+                            move.x = 0
+                        if move.y > 0:  # moving down
+                            move.y = 0
+                        elif move.y < 0:  # moving up
+                            move.y = 0
+                        break
 
-        for x, tileRectRow in enumerate(tileRect):
-            for y, tileRectRowColumn in enumerate(tileRectRow):
-                if tile[x][y][1] == (255, 0, 0) and player.colliderect(tile[x][y][0]):
-                    jumping = False
+            playerPosition[0] -= move.x
+            playerPosition[1] -= move.y
 
         if jumping:
             jump()
