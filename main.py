@@ -202,22 +202,27 @@ def playGame(file):
         player = pygame.Rect(screen.get_width() / 2 - (screen.get_width() / 2) / 40,
                              screen.get_height() / 2 - (screen.get_height() / 2) / 40, (screen.get_width() / 2) / 20,
                              (screen.get_height() / 2) / 20)
-    if fileLine[1] == "firstplaythroughTrue":
-        playerPosition = [0, 0]
-        print("Oh.")
-        fileLine[2] = playerPosition
         map = []
-        for x in range(20):
-            map.append([])
-            for y in range(20):
-                if (x + y) % 2 == 0:
-                    map[x].append('blue')
-                else:
-                    map[x].append('red')
-        fileLine[3] = map
-        fileLine[1] = 'firstplaythroughFalse'
-    backgroundImage = pygame.image.load(
-        'Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
+        if fileLine[1] == "firstplaythroughTrue":
+            playerPosition = [0, 0]
+            print("Oh.")
+            fileLine[2] = playerPosition
+            map = []
+            for x in range(20):
+                map.append([])
+                for y in range(20):
+                    if (x + y) % 2 == 0:
+                        map[x].append('blue')
+                    else:
+                        map[x].append('red')
+        else:
+            playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
+            map = []
+            mapTemp = fileLine[3].split("  ")
+            for x in range(len(mapTemp)):
+                map.append(mapTemp[x].split(" "))
+
+    backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
     backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
     screen.blit(backgroundImage, (0, 0))
     tileRect = []
@@ -262,6 +267,29 @@ def jump():
 playerPosition = []
 jumping = False
 
+def saveFile():
+    print(currentFile)
+    fileLine[1] = 'firstplaythroughFalse'
+    fileLine[2] = str(playerPosition[0]) + " " + str(playerPosition[1])
+    fileLine[3] = ""
+    for y in range(len(map)):
+        mapTemp = map[y]
+        map[y] = ""
+        for x in range(len(mapTemp)):
+            if x == len(map):
+                map[y] += mapTemp[x]
+            else:
+                map[y] += mapTemp[x] + " "
+    for x in range(len(map)):
+        if x == len(map):
+            fileLine[3] += map[x]
+        else:
+            fileLine[3] += map[x] + "  "
+    for x in range(len(fileLine)):
+        fileLine[x] = str(fileLine[x]) + "\n"
+    with open("gamesaves/" + currentFile, 'w') as file:
+        file.writelines(fileLine)
+
 while True:
     pygame.display.update()
 
@@ -279,11 +307,7 @@ while True:
                     typedText += event.unicode
             if inGame == True:
                 if event.key == pygame.K_ESCAPE:
-                    print(currentFile)
-                    for x in range(len(fileLine)):
-                        fileLine[x] = str(fileLine[x]) + "\n"
-                    with open("gamesaves/"+currentFile, 'w') as file:
-                        file.writelines(fileLine)
+                    saveFile()
                     pygame.quit()
                 if event.key == pygame.K_SPACE:
                     if jumping == False:
@@ -325,11 +349,11 @@ while True:
             x_adjustment = 0
             y_adjustment = 0
 
-            next_player_rect = player.move(move.x, move.y)
+            nextPlayer = player.move(move.x, move.y)
 
             for x, tileRectRow in enumerate(tileRect):
                 for y, tileRectRowColumn in enumerate(tileRectRow):
-                    if next_player_rect.colliderect(tileRect[x][y]) and map[x][y] == 'red':
+                    if nextPlayer.colliderect(tileRect[x][y]) and map[x][y] == 'red':
                         if move.x > 0:  # moving right
                             move.x = 0
                         elif move.x < 0:  # moving left
@@ -342,6 +366,7 @@ while True:
 
             playerPosition[0] -= move.x
             playerPosition[1] -= move.y
+            fileLine[2] = playerPosition
 
         if jumping:
             jump()
