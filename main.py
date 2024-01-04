@@ -1,11 +1,13 @@
 import sys
 import pygame
 from pygame.locals import QUIT
+import numpy as np
+import time
 import os
 
 pygame.init()
 
-screen = pygame.display.set_mode((1152, 648), pygame.RESIZABLE)
+screen = pygame.display.set_mode((1152, 648),)
 pygame.display.set_caption('NEA')
 font = pygame.font.Font(None, 32)
 isFullscreen = False
@@ -29,6 +31,10 @@ menu = 'main'
 ButtonsListOffset = 0
 volume = 100
 mouseNotUp = False
+WALL_COLOR = (50, 50, 50)
+GRID_COLOR = (0, 0, 0)
+FLOOR_COLOR = (255, 255, 255)
+FLOOR_NEXT_COL = (0, 0, 255)
 
 inGame = False
 
@@ -147,9 +153,9 @@ def mainMenu(menu):
         buttonsList = [['Play', menuEquals, 'play'], ['Settings', menuEquals, 'settings'], ['Quit', pygame.quit]]
     elif menu == 'settings':
         if not displayAudioError:
-            buttonsList = [['Fullscreen', toggleFullscreen], [f'Volume: {volume}%', changeVolume]]
+            buttonsList = [[f'Volume: {volume}%', changeVolume]]
         else:
-            buttonsList = [['Fullscreen', toggleFullscreen]]
+            buttonsList = []
     elif menu == 'play':
         buttonsList = [['New Game', menuEquals, 'new']]
         for savefile in gameSaves:
@@ -195,6 +201,7 @@ def playGame(file):
     global player
     global tileRect
     global tile
+    mapGenerated = False
     if firstTimeRun == True:
         with open(f"gamesaves/{file}", "r") as f:
             fileLine = [line.strip() for line in f]
@@ -202,26 +209,41 @@ def playGame(file):
         player = pygame.Rect(screen.get_width() / 2 - (screen.get_width() / 2) / 40,
                              screen.get_height() / 2 - (screen.get_height() / 2) / 40, (screen.get_width() / 2) / 20,
                              (screen.get_height() / 2) / 20)
+        size = 10
         map = []
         if fileLine[1] == "firstplaythroughTrue":
             playerPosition = [0, 0]
-            print("Oh.")
             fileLine[2] = playerPosition
             map = []
-            for x in range(20):
-                map.append([])
-                for y in range(20):
-                    if (x + y) % 2 == 0:
-                        map[x].append('blue')
-                    else:
-                        map[x].append('red')
+            # Set dimension of cells and their initial configuration
+            cells = np.random.choice(2, size=(60, 80), p=[0.38, 0.62])
+            cells[0:60, 0] = 1
+            cells[0, 0:80] = 1
+            cells[0:60, 79] = 1
+            cells[59, 0:80] = 1
+            mapGenerated = True
         else:
             playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
             map = []
             mapTemp = fileLine[3].split("  ")
             for x in range(len(mapTemp)):
                 map.append(mapTemp[x].split(" "))
-
+            for y in range(len(map)):
+                for x in range(len(map[y])):
+                    if map[y][x] == "FLOOR_COLOR":
+                        map[y][x] = FLOOR_COLOR
+                    elif map[y][x] == "FLOOR_NEXT_COL":
+                        map[y][x] = FLOOR_NEXT_COL
+                    elif map[y][x] == "WALL_COLOR":
+                        map[y][x] = WALL_COLOR
+                    elif map[y][x] == "GRID_COLOR":
+                        map[y][x] = GRID_COLOR
+    if mapGenerated:
+        running = 500
+        if running > 0:
+            map = []
+            update(screen, cells, size, with_progress=True)
+            running -= 1
     backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
     backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
     screen.blit(backgroundImage, (0, 0))
@@ -231,16 +253,10 @@ def playGame(file):
         tileRect.append([])
         tile.append([])
         for y, tileColour in enumerate(colour, start=0):
-            if tileColour == 'blue':
-                tileRect[x].append(pygame.Rect(((screen.get_width() / 20) * (x)) + playerPosition[0],
-                                               ((screen.get_height() / 20) * (y)) + playerPosition[1],
-                                               screen.get_width() / 20, screen.get_height() / 20))
-                tile[x].append([pygame.draw.rect(screen, (0, 0, 255), tileRect[x][y]), (255, 0, 0)])
-            elif tileColour == 'red':
-                tileRect[x].append(pygame.Rect(((screen.get_width() / 20) * (x)) + playerPosition[0],
-                                               ((screen.get_height() / 20) * (y)) + playerPosition[1],
-                                               screen.get_width() / 20, screen.get_height() / 20))
-                tile[x].append([pygame.draw.rect(screen, (255, 0, 0), tileRect[x][y]), (255, 0, 0)])
+            tileRect[x].append(pygame.Rect(((screen.get_width() / 20) * (x)) + playerPosition[0],
+                                           ((screen.get_height() / 20) * (y)) + playerPosition[1],
+                                           screen.get_width() / 20, screen.get_height() / 20))
+            tile[x].append([pygame.draw.rect(screen, tileColour, tileRect[x][y]), (255, 0, 0)])
     pygame.draw.rect(screen, (0, 255, 0), player)
 
 
@@ -267,24 +283,69 @@ def jump():
 playerPosition = []
 jumping = False
 
+
+def update(screen, cells, size, with_progress=False):
+    # Create temporary matrix of zeros
+    temp = np.zeros((cells.shape[0], cells.shape[1]))
+
+    for row, col in np.ndindex(cells.shape):
+        if col == 0:
+            map.append([])
+        walls = np.sum(cells[row - 1:row + 2, col-1:col+2]) - cells[row, col]
+        colour = FLOOR_COLOR if cells[row, col] == 0 else WALL_COLOR
+
+        #Apply rules (if more than 4 walls create a wall, else a floor)
+        if walls > 4:
+            temp[row, col] = 1
+            if with_progress:
+                colour = WALL_COLOR
+        else:
+            if cells[row, col] == 1:
+                if with_progress:
+                    colour = FLOOR_NEXT_COL
+
+        # Append colour to map array
+        map[row].append(colour)
+
+    # Set borders to walls
+    temp[0:60, 0] = 1
+    temp[0, 0:80] = 1
+    temp[0:60, 79] = 1
+    temp[59, 0:80] = 1
+
+    return temp
+
+
 def saveFile():
     print(currentFile)
     fileLine[1] = 'firstplaythroughFalse'
     fileLine[2] = str(playerPosition[0]) + " " + str(playerPosition[1])
     fileLine[3] = ""
     for y in range(len(map)):
+        for x in range(len(map[y])):
+            if map[y][x] == FLOOR_COLOR:
+                map[y][x] = "FLOOR_COLOR"
+            elif map[y][x] == FLOOR_NEXT_COL:
+                map[y][x] = "FLOOR_NEXT_COL"
+            elif map[y][x] == WALL_COLOR:
+                map[y][x] = "WALL_COLOR"
+            elif map[y][x] == GRID_COLOR:
+                map[y][x] = "GRID_COLOR"
+    for y in range(len(map)):
         mapTemp = map[y]
         map[y] = ""
         for x in range(len(mapTemp)):
-            if x == len(map)-1:
+            if x == len(mapTemp) - 1:
                 map[y] += mapTemp[x]
             else:
                 map[y] += mapTemp[x] + " "
+
     for x in range(len(map)):
-        if x == len(map):
+        if x == len(map) - 1:
             fileLine[3] += map[x]
         else:
             fileLine[3] += map[x] + "  "
+
     for x in range(len(fileLine)):
         fileLine[x] = str(fileLine[x]) + "\n"
     with open("gamesaves/" + currentFile, 'w') as file:
@@ -295,6 +356,7 @@ while True:
 
     for event in pygame.event.get():
         if event.type == QUIT:
+            saveFile()
             pygame.quit()
             sys.exit()
         if event.type == pygame.MOUSEBUTTONUP:
@@ -315,8 +377,8 @@ while True:
                         jumpCount = 10
                 if event.key == pygame.K_h:
                     playerPosition = [screen.get_width(), 0]
-            if event.key == pygame.K_F11:
-                toggleFullscreen()
+            # if event.key == pygame.K_F11: - disabled due to issues with collision and player position.
+            #     toggleFullscreen()
 
         if event.type == pygame.MOUSEWHEEL:
             if menu == 'play' and loadMenu == True and menuNameTextRect.centery + (
@@ -346,22 +408,26 @@ while True:
         if move.length_squared() > 0:
             move.scale_to_length(screen.get_width() / 1000)
 
-            x_adjustment = 0
-            y_adjustment = 0
-
-            nextPlayer = player.move(move.x, move.y)
-
+            nextPlayer_x = player.move(move.x, 0)
             for x, tileRectRow in enumerate(tileRect):
                 for y, tileRectRowColumn in enumerate(tileRectRow):
-                    if nextPlayer.colliderect(tileRect[x][y]) and map[x][y] == 'red':
+                    if nextPlayer_x.colliderect(tileRect[x][y]) and (map[x][y] == FLOOR_COLOR or map[x][y] == WALL_COLOR):
                         if move.x > 0:  # moving right
                             move.x = 0
                         elif move.x < 0:  # moving left
                             move.x = 0
+                        print("X collision")
+                        break
+
+            nextPlayer_y = player.move(0, move.y)
+            for x, tileRectRow in enumerate(tileRect):
+                for y, tileRectRowColumn in enumerate(tileRectRow):
+                    if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == FLOOR_COLOR or map[x][y] == WALL_COLOR):
                         if move.y > 0:  # moving down
                             move.y = 0
                         elif move.y < 0:  # moving up
                             move.y = 0
+                        print("Y collision")
                         break
 
             playerPosition[0] -= move.x
@@ -378,5 +444,6 @@ while True:
         if pygame.mouse.get_pressed()[0] and audioErrorTextRect.collidepoint(pygame.mouse.get_pos()):
             audioMessagePressed = True
 
-# To do:
-# watch https://www.youtube.com/watch?v=GMBqjxcKogA - video on how to make a menu in pygame
+# Issues:
+# Procedural generation acting kinda weird. I think i modified the code incorrectly so its not iterating properly.
+# Collision is acting weird. When player moves diagonally, it goes one pixel into the wall and cannot move.
