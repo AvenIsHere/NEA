@@ -276,7 +276,7 @@ def saveFile():
         mapTemp = map[y]
         map[y] = ""
         for x in range(len(mapTemp)):
-            if x == len(map):
+            if x == len(map)-1:
                 map[y] += mapTemp[x]
             else:
                 map[y] += mapTemp[x] + " "
