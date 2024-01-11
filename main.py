@@ -192,17 +192,12 @@ def mainMenu(menu):
     pygame.draw.rect(screen, (20, 20, 20), TextBackground)
     screen.blit(menuNameText, menuNameTextRect)
 
+mapGenerated = False
 
 def playGame(file):
-    global playerPosition
-    global fileLine
-    global firstTimeRun
-    global map
-    global player
-    global tileRect
-    global tile
-    mapGenerated = False
+    global playerPosition, fileLine, firstTimeRun, map, player, tileRect, tile, running, mapGenerated, cells, size
     if firstTimeRun == True:
+        mapGenerated = False
         with open(f"gamesaves/{file}", "r") as f:
             fileLine = [line.strip() for line in f]
         firstTimeRun = False
@@ -238,11 +233,11 @@ def playGame(file):
                         map[y][x] = WALL_COLOR
                     elif map[y][x] == "GRID_COLOR":
                         map[y][x] = GRID_COLOR
+        running = 35
     if mapGenerated:
-        running = 500
         if running > 0:
             map = []
-            update(screen, cells, size, with_progress=True)
+            cells = update(screen, cells, size, with_progress=True)
             running -= 1
     backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
     backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
@@ -255,7 +250,7 @@ def playGame(file):
         for y, tileColour in enumerate(colour, start=0):
             tileRect[x].append(pygame.Rect(((screen.get_width() / 20) * (x)) + playerPosition[0],
                                            ((screen.get_height() / 20) * (y)) + playerPosition[1],
-                                           screen.get_width() / 20, screen.get_height() / 20))
+                                           screen.get_width() / 20 + 1, screen.get_height() / 20 + 1))
             tile[x].append([pygame.draw.rect(screen, tileColour, tileRect[x][y]), (255, 0, 0)])
     pygame.draw.rect(screen, (0, 255, 0), player)
 
@@ -285,6 +280,8 @@ jumping = False
 
 
 def update(screen, cells, size, with_progress=False):
+    global map
+
     # Create temporary matrix of zeros
     temp = np.zeros((cells.shape[0], cells.shape[1]))
 
@@ -406,12 +403,12 @@ while True:
 
         move = pygame.math.Vector2(right - left, down - up)
         if move.length_squared() > 0:
-            move.scale_to_length(screen.get_width() / 1000)
+            move.scale_to_length(screen.get_width() / 800)
 
             nextPlayer_x = player.move(move.x, 0)
             for x, tileRectRow in enumerate(tileRect):
                 for y, tileRectRowColumn in enumerate(tileRectRow):
-                    if nextPlayer_x.colliderect(tileRect[x][y]) and (map[x][y] == FLOOR_COLOR or map[x][y] == WALL_COLOR):
+                    if nextPlayer_x.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL):
                         if move.x > 0:  # moving right
                             move.x = 0
                         elif move.x < 0:  # moving left
@@ -422,7 +419,7 @@ while True:
             nextPlayer_y = player.move(0, move.y)
             for x, tileRectRow in enumerate(tileRect):
                 for y, tileRectRowColumn in enumerate(tileRectRow):
-                    if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == FLOOR_COLOR or map[x][y] == WALL_COLOR):
+                    if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL):
                         if move.y > 0:  # moving down
                             move.y = 0
                         elif move.y < 0:  # moving up
