@@ -4,6 +4,7 @@ from pygame.locals import QUIT
 import numpy as np
 import time
 import os
+import random
 
 pygame.init()
 
@@ -35,6 +36,34 @@ WALL_COLOR = (50, 50, 50)
 GRID_COLOR = (0, 0, 0)
 FLOOR_COLOR = (255, 255, 255)
 FLOOR_NEXT_COL = (0, 0, 255)
+PresetMaps = [
+    ['---------------',
+     '-             -',
+     '-             -',
+     '-       -------',
+     '-              ',
+     '----           ',
+     '-----          ',
+     '               ',
+     '              -',
+     '              -',
+     '             --',
+     '---------------'],
+
+    ['---------------',
+     '---------------',
+     '-         -----',
+     '-         -----',
+     '            ---',
+     '              -',
+     '              -',
+     '              -',
+     '-              ',
+     '---------------',
+     '---------------',
+     '---------------',
+     '---------------']
+]
 
 inGame = False
 
@@ -217,6 +246,21 @@ def playGame(file):
             cells[0:60, 79] = 1
             cells[59, 0:80] = 1
             mapGenerated = True
+            map = []
+            randomMaps = []
+            for y in range(5):
+                randomMaps.append([])
+                for x in range(5):
+                    randomMaps.append(random.randint(0, 1))
+            for LevelY in range(5):
+                for y in range(len(PresetMaps[0])):
+                    map.append([])
+                    for LevelX in range(5):
+                        for x in range(len(PresetMaps[0][0])):
+                            if PresetMaps[randomMaps[LevelY][LevelX]][y][x] == "-":
+                                map.append(WALL_COLOR)
+                            elif PresetMaps[randomMaps[LevelY][LevelX]][y][x] == " ":
+                                map.append(FLOOR_COLOR)
         else:
             playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
             map = []
@@ -233,12 +277,12 @@ def playGame(file):
                         map[y][x] = WALL_COLOR
                     elif map[y][x] == "GRID_COLOR":
                         map[y][x] = GRID_COLOR
-        running = 35
-    if mapGenerated:
-        if running > 0:
-            map = []
-            cells = update(screen, cells, size, with_progress=True)
-            running -= 1
+    #    running = 34
+    # if mapGenerated:
+        # if running > 0:
+        #     map = []
+        #     cells = update(screen, cells, size, with_progress=True)
+        #     running -= 1
     backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
     backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
     screen.blit(backgroundImage, (0, 0))
