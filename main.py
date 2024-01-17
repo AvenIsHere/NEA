@@ -248,19 +248,21 @@ def playGame(file):
             mapGenerated = True
             map = []
             randomMaps = []
+
             for y in range(5):
                 randomMaps.append([])
                 for x in range(5):
-                    randomMaps.append(random.randint(0, 1))
+                    randomMaps[y].append(random.randint(0, 1))
+
             for LevelY in range(5):
                 for y in range(len(PresetMaps[0])):
                     map.append([])
                     for LevelX in range(5):
                         for x in range(len(PresetMaps[0][0])):
                             if PresetMaps[randomMaps[LevelY][LevelX]][y][x] == "-":
-                                map.append(WALL_COLOR)
+                                map[LevelY * len(PresetMaps[0]) + y].append(WALL_COLOR)
                             elif PresetMaps[randomMaps[LevelY][LevelX]][y][x] == " ":
-                                map.append(FLOOR_COLOR)
+                                map[LevelY * len(PresetMaps[0]) + y].append(FLOOR_COLOR)
         else:
             playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
             map = []
