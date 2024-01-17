@@ -535,17 +535,16 @@ while True:
 # Issues:
 # Player sometimes goes one pixel into the wall when moving right. No clue what causes it, it appears to be random.
 
-# Todo:
-# Add gravity and remove up/down movement.
-# Make jumping work using PlayerPosition instead of moving the player on screen.
-# Make sure all platforms are accessible
-# Properly adjust player speed
-# Add sprites/assets
-# Add levels
-# Add items
-# Add Enemies
-# Add pathfinding for enemies
-# Add health
-# Add death screen
-# Add doors
+# Todo: Add gravity and remove up/down movement.
+# Todo: Make jumping work using PlayerPosition instead of moving the player on screen.
+# Todo: Make sure all platforms are accessible
+# Todo: Properly adjust player speed
+# Todo: Add sprites/assets
+# Todo: Add levels
+# Todo: Add items
+# Todo: Add Enemies
+# Todo: Add pathfinding for enemies
+# Todo: Add health
+# Todo: Add death screen
+# Todo: Add doors
 # 
