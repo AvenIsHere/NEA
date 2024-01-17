@@ -547,4 +547,3 @@ while True:
 # Todo: Add health
 # Todo: Add death screen
 # Todo: Add doors
-# 
