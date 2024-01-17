@@ -8,7 +8,7 @@ import random
 
 pygame.init()
 
-screen = pygame.display.set_mode((1152, 648),)
+screen = pygame.display.set_mode((1152, 648))
 pygame.display.set_caption('NEA')
 font = pygame.font.Font(None, 32)
 isFullscreen = False
@@ -279,6 +279,17 @@ def playGame(file):
                             elif PresetMaps[randomMaps[LevelY][LevelX]][x][y] == " ":
                                 map[LevelY * len(PresetMaps[0]) + y].append(FLOOR_COLOR)
 
+            playerBeginPosition = random.randint(0, 5) # This section is not currently working
+            if playerBeginPosition < 5:
+                # playerPosition = [(3/4 * screen.get_width() * (playerBeginPosition+1)) - (3/4 * screen.get_width() * 8/20), (screen.get_height() * 11/20)]
+                playerPosition = [(playerBeginPosition * 15 + 8) * (screen.get_width()/20), (playerBeginPosition * 13 + 11)* (screen.get_height()/20)]
+            if playerBeginPosition == 5:
+                playerPosition = [(3/4 * screen.get_width()) - (3/4 * screen.get_width() * 8/20), (screen.get_height() * 11/20) + screen.get_height()]
+            if playerBeginPosition == 6:
+                playerPosition = [(3 / 4 * screen.get_width() * 5) - (3 / 4 * screen.get_width() * 8 / 20),(screen.get_height() * 11 / 20) + screen.get_height()]
+            if playerBeginPosition > 6:
+                playerPosition = [(3 / 4 * screen.get_width() * (playerBeginPosition + 1)) - (3 / 4 * screen.get_width() * 8 / 20),(screen.get_height() * 11 / 20) + (screen.get_height() * 4)]
+
         else:
             playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
             map = []
@@ -301,9 +312,10 @@ def playGame(file):
         #     map = []
         #     cells = update(screen, cells, size, with_progress=True)
         #     running -= 1
-    backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
-    backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
-    screen.blit(backgroundImage, (0, 0))
+    # backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
+    # backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
+    # screen.blit(backgroundImage, (0, 0))
+    screen.fill((50, 50, 50))
     tileRect = []
     tile = []
     for x, colour in enumerate(map, start=0):
@@ -457,6 +469,9 @@ while True:
 
     if inGame:
         playGame(currentFile)
+
+        print(playerPosition)
+
         key = pygame.key.get_pressed()
         up = key[pygame.K_w] or key[pygame.K_UP]
         down = key[pygame.K_s] or key[pygame.K_DOWN]
@@ -489,6 +504,20 @@ while True:
                         print("Y collision")
                         break
 
+            if playerPosition[0] < -3268.8:
+                if move.x > 0:
+                    move.x = 0
+            if playerPosition[0] > 561:
+                if move.x < 0:
+                    move.x = 0
+            if playerPosition[1] < -1776:
+                if move.y > 0:
+                    move.y = 0
+            if playerPosition[1] > 315.2:
+                if move.y < 0:
+                    move.y = 0
+
+
             playerPosition[0] -= move.x
             playerPosition[1] -= move.y
             fileLine[2] = playerPosition
@@ -505,3 +534,18 @@ while True:
 
 # Issues:
 # Player sometimes goes one pixel into the wall when moving right. No clue what causes it, it appears to be random.
+
+# Todo:
+# Add gravity and remove up/down movement.
+# Make jumping work using PlayerPosition instead of moving the player on screen.
+# Make sure all platforms are accessible
+# Properly adjust player speed
+# Add sprites/assets
+# Add levels
+# Add items
+# Add Enemies
+# Add pathfinding for enemies
+# Add health
+# Add death screen
+# Add doors
+# 
