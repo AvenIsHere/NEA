@@ -37,32 +37,47 @@ GRID_COLOR = (0, 0, 0)
 FLOOR_COLOR = (255, 255, 255)
 FLOOR_NEXT_COL = (0, 0, 255)
 PresetMaps = [
-    ['---------------',
-     '-             -',
-     '-             -',
+    ['-----------   -',
+     '              -',
+     '   --         -',
      '-       -------',
      '-              ',
      '----           ',
-     '-----          ',
+     '-----   --     ',
      '               ',
+     '   -----      -',
+     '              -',
+     '             --',
+     '             --',
+     '---      ------'],
+
+    ['------    -----',
+     '------   ------',
+     '-         -----',
+     '-       -------',
+     '     --     ---',
+     '              -',
+     '  ----  ---   -',
+     '              -',
+     '-      ---     ',
+     '              -',
+     '------   ------',
+     '-------  ------',
+     '------    -----'],
+
+    ['        -----  ',
+     '       -----   ',
+     '       ----    ',
+     '       -----   ',
+     '  -------      ',
+     '   ------      ',
      '              -',
      '              -',
      '             --',
-     '---------------'],
-
-    ['---------------',
-     '---------------',
-     '-         -----',
-     '-         -----',
+     '-     ---   ---',
      '            ---',
-     '              -',
-     '              -',
-     '              -',
-     '-              ',
-     '---------------',
-     '---------------',
-     '---------------',
-     '---------------']
+     '     ---  - ---',
+     '    -----------']
 ]
 
 inGame = False
@@ -252,17 +267,18 @@ def playGame(file):
             for y in range(5):
                 randomMaps.append([])
                 for x in range(5):
-                    randomMaps[y].append(random.randint(0, 1))
+                    randomMaps[y].append(random.randint(0, len(PresetMaps)-1))
 
             for LevelY in range(5):
-                for y in range(len(PresetMaps[0])):
+                for y in range(len(PresetMaps[0][0])):
                     map.append([])
                     for LevelX in range(5):
-                        for x in range(len(PresetMaps[0][0])):
-                            if PresetMaps[randomMaps[LevelY][LevelX]][y][x] == "-":
+                        for x in range(len(PresetMaps[0])):
+                            if PresetMaps[randomMaps[LevelY][LevelX]][x][y] == "-":
                                 map[LevelY * len(PresetMaps[0]) + y].append(WALL_COLOR)
-                            elif PresetMaps[randomMaps[LevelY][LevelX]][y][x] == " ":
+                            elif PresetMaps[randomMaps[LevelY][LevelX]][x][y] == " ":
                                 map[LevelY * len(PresetMaps[0]) + y].append(FLOOR_COLOR)
+
         else:
             playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
             map = []
@@ -488,5 +504,4 @@ while True:
             audioMessagePressed = True
 
 # Issues:
-# Procedural generation acting kinda weird. I think i modified the code incorrectly so its not iterating properly.
-# Collision is acting weird. When player moves diagonally, it goes one pixel into the wall and cannot move.
+# Player sometimes goes one pixel into the wall when moving right. No clue what causes it, it appears to be random.
