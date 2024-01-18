@@ -77,7 +77,21 @@ PresetMaps = [
      '-     ---   ---',
      '            ---',
      '     ---  - ---',
-     '    -----------']
+     '    -----------'],
+
+    ['--   --   ---  ',
+     ' --  ---   ----',
+     '    ----   ----',
+     '              -',
+     '----           ',
+     '               ',
+     '-  ------      ',
+     '  --    -      ',
+     '      ----     ',
+     '-             -',
+     '-  ----     ---',
+     '---------  ----',
+     '-------     ---']
 ]
 
 inGame = False
@@ -251,7 +265,7 @@ def playGame(file):
         size = 10
         map = []
         if fileLine[1] == "firstplaythroughTrue":
-            playerPosition = [0, 0]
+            playerPosition = [90, -10]
             fileLine[2] = playerPosition
             map = []
             # Set dimension of cells and their initial configuration
@@ -278,17 +292,6 @@ def playGame(file):
                                 map[LevelY * len(PresetMaps[0]) + y].append(WALL_COLOR)
                             elif PresetMaps[randomMaps[LevelY][LevelX]][x][y] == " ":
                                 map[LevelY * len(PresetMaps[0]) + y].append(FLOOR_COLOR)
-
-            playerBeginPosition = random.randint(0, 5) # This section is not currently working
-            if playerBeginPosition < 5:
-                # playerPosition = [(3/4 * screen.get_width() * (playerBeginPosition+1)) - (3/4 * screen.get_width() * 8/20), (screen.get_height() * 11/20)]
-                playerPosition = [(playerBeginPosition * 15 + 8) * (screen.get_width()/20), (playerBeginPosition * 13 + 11)* (screen.get_height()/20)]
-            if playerBeginPosition == 5:
-                playerPosition = [(3/4 * screen.get_width()) - (3/4 * screen.get_width() * 8/20), (screen.get_height() * 11/20) + screen.get_height()]
-            if playerBeginPosition == 6:
-                playerPosition = [(3 / 4 * screen.get_width() * 5) - (3 / 4 * screen.get_width() * 8 / 20),(screen.get_height() * 11 / 20) + screen.get_height()]
-            if playerBeginPosition > 6:
-                playerPosition = [(3 / 4 * screen.get_width() * (playerBeginPosition + 1)) - (3 / 4 * screen.get_width() * 8 / 20),(screen.get_height() * 11 / 20) + (screen.get_height() * 4)]
 
         else:
             playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
@@ -338,15 +341,25 @@ def jump():
         neg = 1
         if jumpCount < 0:
             neg = -1
-        player = player.move(0, -(jumpCount ** 2 * 0.1 * neg))
+
+        move = pygame.math.Vector2(0, -(jumpCount ** 2 * 0.1 * neg))
+        nextPlayer_y = player.move(0, move.y)
+        for x, tileRectRow in enumerate(tileRect):
+            for y, tileRectRowColumn in enumerate(tileRectRow):
+                if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL):
+                    if move.y > 0:  # moving down
+                        move.y = 0
+                    elif move.y < 0:  # moving up
+                        move.y = 0
+                    print("Y collision")
+                    break
+        playerPosition[1] -= move.y
+
         print('working')
         jumpCount -= 1
     else:
         jumping = False
         jumpCount = 10
-        player = pygame.Rect(screen.get_width() / 2 - (screen.get_width() / 2) / 40,
-                             screen.get_height() / 2 - (screen.get_height() / 2) / 40, (screen.get_width() / 2) / 20,
-                             (screen.get_height() / 2) / 20)
 
 
 playerPosition = []
@@ -427,7 +440,8 @@ while True:
 
     for event in pygame.event.get():
         if event.type == QUIT:
-            saveFile()
+            if inGame:
+                saveFile()
             pygame.quit()
             sys.exit()
         if event.type == pygame.MOUSEBUTTONUP:
@@ -438,10 +452,11 @@ while True:
                     typedText = typedText[:-1]
                 else:
                     typedText += event.unicode
-            if inGame == True:
+            if inGame:
                 if event.key == pygame.K_ESCAPE:
                     saveFile()
                     pygame.quit()
+                    sys.exit()
                 if event.key == pygame.K_SPACE:
                     if jumping == False:
                         jumping = True
@@ -477,6 +492,9 @@ while True:
         down = key[pygame.K_s] or key[pygame.K_DOWN]
         left = key[pygame.K_a] or key[pygame.K_LEFT]
         right = key[pygame.K_d] or key[pygame.K_RIGHT]
+
+        if jumping:
+            jump()
 
         move = pygame.math.Vector2(right - left, down - up)
         if move.length_squared() > 0:
@@ -522,9 +540,6 @@ while True:
             playerPosition[1] -= move.y
             fileLine[2] = playerPosition
 
-        if jumping:
-            jump()
-
     if displayAudioError == True and audioMessagePressed == False:
         audioErrorText = font.render("Audio Error. Press to dismiss.", True, (255, 0, 0))
         audioErrorTextRect = audioErrorText.get_rect(center=(screen.get_width() / 2, screen.get_height() - 30))
@@ -547,3 +562,6 @@ while True:
 # Todo: Add health
 # Todo: Add death screen
 # Todo: Add doors
+
+# Considerations for V2:
+# Add random player spawning
