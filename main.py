@@ -95,6 +95,10 @@ PresetMaps = [
      '-------     ---']
 ]
 
+items = [['Increased speed', (0,0,200)]
+
+]
+
 inGame = False
 
 
@@ -332,6 +336,12 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
             tile[x].append([pygame.draw.rect(screen, tileColour, tileRect[x][y]), (255, 0, 0)])
     pygame.draw.rect(screen, (0, 255, 0), player)
 
+spawnedItems = []
+def spawnItem(type):
+    if type == "powerup":
+        spawnedItems.append(random.randint(0, len(items)), random.randint(0, 15*5))
+
+
 
 def jump(): # Is called when the player jumps, calculates the player movement up and down when jumping, as well as stopping the jump when landing.
     global player
@@ -555,8 +565,8 @@ while True:
         if pygame.mouse.get_pressed()[0] and audioErrorTextRect.collidepoint(pygame.mouse.get_pos()):
             audioMessagePressed = True
 
-# Issues:
-# Player sometimes goes one pixel into the wall when moving right. No clue what causes it, it appears to be random.
+# FIXME: Player sometimes goes one pixel into the wall. No clue what causes it, it appears to be random. Player cannot move in other axis until moving away from the wall.
+# FIXME: Player moves up and down when at the bottom of the map. Just visual, causes no gameplay issues.
 
 # Todo: Make sure all platforms are accessible
 # Todo: Properly adjust player speed, jump height, then remove up/down movement.
