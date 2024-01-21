@@ -36,6 +36,7 @@ WALL_COLOR = (50, 50, 50)
 GRID_COLOR = (0, 0, 0)
 FLOOR_COLOR = (255, 255, 255)
 FLOOR_NEXT_COL = (0, 0, 255)
+gravity = -1.5
 PresetMaps = [
     ['-----------   -',
      '              -',
@@ -97,7 +98,7 @@ PresetMaps = [
 inGame = False
 
 
-def button(text, position, size, colour, action=None, *args):
+def button(text, position, size, colour, action=None, *args): # draws a button on screen with optional function
     global mouseNotUp
     button_rect = pygame.Rect(position[0] - (size[0] / 2), position[1] - (size[1] / 2), size[0], size[1])
     pygame.draw.rect(screen, colour, button_rect)
@@ -110,7 +111,7 @@ def button(text, position, size, colour, action=None, *args):
         mouseNotUp = True
 
 
-def menuEquals(menu_set):
+def menuEquals(menu_set): # changes the menu to
     global menu
     global difficulty
     global typedText
@@ -122,7 +123,7 @@ def menuEquals(menu_set):
     ButtonsListOffset = 0
 
 
-def changeVolume():
+def changeVolume(): # changes the volume
     global volume
     volume += 10
     if volume > 100:
@@ -130,7 +131,7 @@ def changeVolume():
     pygame.mixer.music.set_volume(volume / 100)
 
 
-def toggleFullscreen():
+def toggleFullscreen(): # toggles fullscreen, currently unused.
     global isFullscreen
     global player
     if not isFullscreen:
@@ -147,7 +148,7 @@ def toggleFullscreen():
                              (screen.get_height() / 2) / 20)
 
 
-def drawTextBox(text, position, size, colour, borderColour, borderSize, typedText):
+def drawTextBox(text, position, size, colour, borderColour, borderSize, typedText): # draws a text box
     if typedText == '':
         text = font.render(text, True, (0, 0, 0))
         textRect = text.get_rect(center=position)
@@ -161,7 +162,7 @@ def drawTextBox(text, position, size, colour, borderColour, borderSize, typedTex
     screen.blit(text, textRect)
 
 
-def setDifficulty():
+def setDifficulty(): # changes the difficulty in the create file menu
     global difficulty
     difficulties = {
         'Easy': 'Medium',
@@ -172,7 +173,7 @@ def setDifficulty():
     difficulty = difficulties.get(difficulty, 'Easy')
 
 
-def createFile():
+def createFile(): # creates a game file
     global fileName
     global difficulty
     global gameSaves
@@ -183,7 +184,7 @@ def createFile():
         file.write(f'None\n')
 
 
-def loadFile(file):
+def loadFile(file): # loads the chosen game file
     global inGame
     global loadMenu
     global currentFile
@@ -196,7 +197,7 @@ def loadFile(file):
     firstTimeRun = True
 
 
-def mainMenu(menu):
+def mainMenu(menu): # Shows and handles almost everything related to the main menu, menu parameter controls which menu is currently showing
     global menuNameTextRect
     global volume
     global buttonsList
@@ -252,7 +253,7 @@ def mainMenu(menu):
 
 mapGenerated = False
 
-def playGame(file):
+def playGame(file): # Handles most of the gameplay TODO: Split into multiple functions
     global playerPosition, fileLine, firstTimeRun, map, player, tileRect, tile, running, mapGenerated, cells, size
     if firstTimeRun == True:
         mapGenerated = False
@@ -332,7 +333,7 @@ def playGame(file):
     pygame.draw.rect(screen, (0, 255, 0), player)
 
 
-def jump():
+def jump(): # Is called when the player jumps, calculates the player movement up and down when jumping, as well as stopping the jump when landing.
     global player
     global jumpCount
     global playerPosition
@@ -346,16 +347,17 @@ def jump():
         nextPlayer_y = player.move(0, move.y)
         for x, tileRectRow in enumerate(tileRect):
             for y, tileRectRowColumn in enumerate(tileRectRow):
-                if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL):
+                if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL) and tileRect[x][y].top < nextPlayer_y.top:
+                    jumpCount = -1
+
+                if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL) and tileRect[x][y].bottom > nextPlayer_y.bottom:
                     if move.y > 0:  # moving down
                         move.y = 0
                     elif move.y < 0:  # moving up
                         move.y = 0
-                    print("Y collision")
                     break
-        playerPosition[1] -= move.y
 
-        print('working')
+        playerPosition[1] -= move.y
         jumpCount -= 1
     else:
         jumping = False
@@ -366,7 +368,7 @@ playerPosition = []
 jumping = False
 
 
-def update(screen, cells, size, with_progress=False):
+def update(screen, cells, size, with_progress=False): # Procedural generation, unused.
     global map
 
     # Create temporary matrix of zeros
@@ -400,7 +402,7 @@ def update(screen, cells, size, with_progress=False):
     return temp
 
 
-def saveFile():
+def saveFile(): # Saves the current file, used when exiting the game
     print(currentFile)
     fileLine[1] = 'firstplaythroughFalse'
     fileLine[2] = str(playerPosition[0]) + " " + str(playerPosition[1])
@@ -497,6 +499,8 @@ while True:
             jump()
 
         move = pygame.math.Vector2(right - left, down - up)
+        if not jumping:
+            move.y -= gravity
         if move.length_squared() > 0:
             move.scale_to_length(screen.get_width() / 800)
 
@@ -525,15 +529,19 @@ while True:
             if playerPosition[0] < -3268.8:
                 if move.x > 0:
                     move.x = 0
+                playerPosition[0] = -3268.8
             if playerPosition[0] > 561:
                 if move.x < 0:
                     move.x = 0
+                playerPosition[0] = 561
             if playerPosition[1] < -1776:
                 if move.y > 0:
                     move.y = 0
+                playerPosition[1] = -1776
             if playerPosition[1] > 315.2:
                 if move.y < 0:
                     move.y = 0
+                playerPosition[1] = 315.2
 
 
             playerPosition[0] -= move.x
@@ -550,10 +558,8 @@ while True:
 # Issues:
 # Player sometimes goes one pixel into the wall when moving right. No clue what causes it, it appears to be random.
 
-# Todo: Add gravity and remove up/down movement.
-# Todo: Make jumping work using PlayerPosition instead of moving the player on screen.
 # Todo: Make sure all platforms are accessible
-# Todo: Properly adjust player speed
+# Todo: Properly adjust player speed, jump height, then remove up/down movement.
 # Todo: Add sprites/assets
 # Todo: Add levels
 # Todo: Add items
