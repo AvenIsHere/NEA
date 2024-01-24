@@ -95,7 +95,11 @@ PresetMaps = [
      '-------     ---']
 ]
 
-items = [['Increased speed', (0,0,200)]
+powerups = [['Increased speed', (0,0,200)]
+
+]
+
+weapons = [['Gun', (200,0,0)]
 
 ]
 
@@ -115,7 +119,7 @@ def button(text, position, size, colour, action=None, *args): # draws a button o
         mouseNotUp = True
 
 
-def menuEquals(menu_set): # changes the menu to
+def menuEquals(menu_set): # changes the menu to menu_set
     global menu
     global difficulty
     global typedText
@@ -338,10 +342,26 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
 
 spawnedItems = []
 def spawnItem(type):
+    global spawnedItems
+    location = (random.randint(0,15*5),random.randint(0,13*5))
+    print(location)
+    print("map len "+str(len(map))+" "+str(len(map[0])))
+    while map[location[0]][location[1]] == GRID_COLOR or map[location[0]][location[1]] == WALL_COLOR or map[location[0]][location[1]] == FLOOR_NEXT_COL:
+        location = (random.randint(0, 15 * 5), random.randint(0, 13 * 5))
     if type == "powerup":
-        spawnedItems.append(random.randint(0, len(items)), random.randint(0, 15*5))
+        spawnedItems.append([random.randint(0, len(powerups)), type, location])
+    elif type == "weapon":
+        spawnedItems.append([random.randint(0, len(weapons)), type, location])
 
-
+itemsRendered = []
+def renderItem(spawnedItems, amount):
+    itemsRendered = []
+    for x in range(amount):
+        itemsRendered.append(pygame.Rect(spawnedItems[x][2][0],spawnedItems[x][2][1],screen.get_width()/30,screen.get_height()/30))
+        if spawnedItems[x][1] == "powerup":
+            pygame.draw.rect(screen,powerups[spawnedItems[x][0]][1],itemsRendered[-1])
+        elif spawnedItems[x][1] == "weapon":
+            pygame.draw.rect(screen, weapons[spawnedItems[x][0]][1], itemsRendered[-1])
 
 def jump(): # Is called when the player jumps, calculates the player movement up and down when jumping, as well as stopping the jump when landing.
     global player
@@ -507,6 +527,11 @@ while True:
 
         if jumping:
             jump()
+
+        # for x in range(20):
+        #     spawnItem("powerup")
+        #     spawnItem("weapon")
+        # renderItem(spawnedItems, 20)
 
         move = pygame.math.Vector2(right - left, down - up)
         if not jumping:
