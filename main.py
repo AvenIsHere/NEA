@@ -193,16 +193,30 @@ def createFile(): # creates a game file
 
 
 def loadFile(file): # loads the chosen game file
-    global inGame
-    global loadMenu
-    global currentFile
-    global currentFile
-    global firstTimeRun
+    global inGame, loadMenu, currentFile, firstTimeRun, map, playerPosition, fileLine
     print(f'load {file}')
     inGame = True
     loadMenu = False
     currentFile = file
     firstTimeRun = True
+    with open(f"gamesaves/{file}", "r") as f:
+        fileLine = [line.strip() for line in f]
+    if fileLine[1] != "firstplaythroughTrue":
+        playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
+        map = []
+        mapTemp = fileLine[3].split("  ")
+        for x in range(len(mapTemp)):
+            map.append(mapTemp[x].split(" "))
+        for y in range(len(map)):
+            for x in range(len(map[y])):
+                if map[y][x] == "FLOOR_COLOR":
+                    map[y][x] = FLOOR_COLOR
+                elif map[y][x] == "FLOOR_NEXT_COL":
+                    map[y][x] = FLOOR_NEXT_COL
+                elif map[y][x] == "WALL_COLOR":
+                    map[y][x] = WALL_COLOR
+                elif map[y][x] == "GRID_COLOR":
+                    map[y][x] = GRID_COLOR
 
 
 def mainMenu(menu): # Shows and handles almost everything related to the main menu, menu parameter controls which menu is currently showing
@@ -272,7 +286,6 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
                              screen.get_height() / 2 - (screen.get_height() / 2) / 40, (screen.get_width() / 2) / 20,
                              (screen.get_height() / 2) / 20)
         size = 10
-        map = []
         if fileLine[1] == "firstplaythroughTrue":
             playerPosition = [90, -10]
             fileLine[2] = playerPosition
@@ -302,22 +315,6 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
                             elif PresetMaps[randomMaps[LevelY][LevelX]][x][y] == " ":
                                 map[LevelY * len(PresetMaps[0]) + y].append(FLOOR_COLOR)
 
-        else:
-            playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
-            map = []
-            mapTemp = fileLine[3].split("  ")
-            for x in range(len(mapTemp)):
-                map.append(mapTemp[x].split(" "))
-            for y in range(len(map)):
-                for x in range(len(map[y])):
-                    if map[y][x] == "FLOOR_COLOR":
-                        map[y][x] = FLOOR_COLOR
-                    elif map[y][x] == "FLOOR_NEXT_COL":
-                        map[y][x] = FLOOR_NEXT_COL
-                    elif map[y][x] == "WALL_COLOR":
-                        map[y][x] = WALL_COLOR
-                    elif map[y][x] == "GRID_COLOR":
-                        map[y][x] = GRID_COLOR
     #    running = 34
     # if mapGenerated:
         # if running > 0:
@@ -327,6 +324,7 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
     # backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
     # backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
     # screen.blit(backgroundImage, (0, 0))
+    print("map len " + str(len(map)) + " " + str(len(map[0])))
     screen.fill((50, 50, 50))
     tileRect = []
     tile = []
@@ -517,7 +515,7 @@ while True:
     if inGame:
         playGame(currentFile)
 
-        print(playerPosition)
+        # print(playerPosition)
 
         key = pygame.key.get_pressed()
         up = key[pygame.K_w] or key[pygame.K_UP]
