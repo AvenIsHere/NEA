@@ -201,10 +201,11 @@ def loadFile(file): # loads the chosen game file
     firstTimeRun = True
     with open(f"gamesaves/{file}", "r") as f:
         fileLine = [line.strip() for line in f]
-    if fileLine[1] != "firstplaythroughTrue":
+    if fileLine[1] == "firstplaythroughFalse":
         playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
         map = []
         mapTemp = fileLine[3].split("  ")
+        print(len(mapTemp))
         for x in range(len(mapTemp)):
             map.append(mapTemp[x].split(" "))
         for y in range(len(map)):
@@ -314,6 +315,11 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
                                 map[LevelY * len(PresetMaps[0]) + y].append(WALL_COLOR)
                             elif PresetMaps[randomMaps[LevelY][LevelX]][x][y] == " ":
                                 map[LevelY * len(PresetMaps[0]) + y].append(FLOOR_COLOR)
+                    if map[-1] == []:
+                        map.pop()
+        for x in range(20):
+            spawnItem("powerup")
+            spawnItem("weapon")
 
     #    running = 34
     # if mapGenerated:
@@ -324,7 +330,7 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
     # backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
     # backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
     # screen.blit(backgroundImage, (0, 0))
-    print("map len " + str(len(map)) + " " + str(len(map[0])))
+    # print("map len " + str(len(map)) + " " + str(len(map[0])))
     screen.fill((50, 50, 50))
     tileRect = []
     tile = []
@@ -336,26 +342,41 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
                                            ((screen.get_height() / 20) * (y)) + playerPosition[1],
                                            screen.get_width() / 20 + 1, screen.get_height() / 20 + 1))
             tile[x].append([pygame.draw.rect(screen, tileColour, tileRect[x][y]), (255, 0, 0)])
+    renderItem(spawnedItems, 20)
     pygame.draw.rect(screen, (0, 255, 0), player)
 
 spawnedItems = []
+
 def spawnItem(type):
     global spawnedItems
-    location = (random.randint(0,15*5),random.randint(0,13*5))
+    location = (random.randint(0,66),random.randint(0,64))
     print(location)
     print("map len "+str(len(map))+" "+str(len(map[0])))
-    while map[location[0]][location[1]] == GRID_COLOR or map[location[0]][location[1]] == WALL_COLOR or map[location[0]][location[1]] == FLOOR_NEXT_COL:
-        location = (random.randint(0, 15 * 5), random.randint(0, 13 * 5))
+    isDone = False
+    while isDone == False:
+        if map[location[0]][location[1]] == map[location[0]][-1]:
+            if map[location[0]][location[1]] == GRID_COLOR or map[location[0]][location[1]] == WALL_COLOR or map[location[0]][location[1]] == FLOOR_NEXT_COL:
+                location = (random.randint(0, 66), random.randint(0, 64))
+            else:
+                isDone = True
+        else:
+            if map[location[0]][location[1]+1] == FLOOR_COLOR:
+                location = (random.randint(0, 66), random.randint(0, 64))
+            else:
+                if map[location[0]][location[1]] == GRID_COLOR or map[location[0]][location[1]] == WALL_COLOR or map[location[0]][location[1]] == FLOOR_NEXT_COL:
+                    location = (random.randint(0, 66), random.randint(0, 64))
+                else:
+                    isDone = True
     if type == "powerup":
-        spawnedItems.append([random.randint(0, len(powerups)), type, location])
+        spawnedItems.append([random.randint(0, len(powerups)-1), type, location])
     elif type == "weapon":
-        spawnedItems.append([random.randint(0, len(weapons)), type, location])
+        spawnedItems.append([random.randint(0, len(weapons)-1), type, location])
 
 itemsRendered = []
 def renderItem(spawnedItems, amount):
     itemsRendered = []
     for x in range(amount):
-        itemsRendered.append(pygame.Rect(spawnedItems[x][2][0],spawnedItems[x][2][1],screen.get_width()/30,screen.get_height()/30))
+        itemsRendered.append(pygame.Rect(((screen.get_width() / 20) * (spawnedItems[x][2][0])) + playerPosition[0],((screen.get_height() / 20) * (spawnedItems[x][2][1])) + playerPosition[1],screen.get_width()/30,screen.get_height()/30))
         if spawnedItems[x][1] == "powerup":
             pygame.draw.rect(screen,powerups[spawnedItems[x][0]][1],itemsRendered[-1])
         elif spawnedItems[x][1] == "weapon":
@@ -459,7 +480,6 @@ def saveFile(): # Saves the current file, used when exiting the game
             fileLine[3] += map[x]
         else:
             fileLine[3] += map[x] + "  "
-
     for x in range(len(fileLine)):
         fileLine[x] = str(fileLine[x]) + "\n"
     with open("gamesaves/" + currentFile, 'w') as file:
@@ -526,11 +546,6 @@ while True:
         if jumping:
             jump()
 
-        # for x in range(20):
-        #     spawnItem("powerup")
-        #     spawnItem("weapon")
-        # renderItem(spawnedItems, 20)
-
         move = pygame.math.Vector2(right - left, down - up)
         if not jumping:
             move.y -= gravity
@@ -545,7 +560,7 @@ while True:
                             move.x = 0
                         elif move.x < 0:  # moving left
                             move.x = 0
-                        print("X collision")
+                        # print("X collision")
                         break
 
             nextPlayer_y = player.move(0, move.y)
@@ -556,7 +571,7 @@ while True:
                             move.y = 0
                         elif move.y < 0:  # moving up
                             move.y = 0
-                        print("Y collision")
+                        # print("Y collision")
                         break
 
             if playerPosition[0] < -3268.8:
