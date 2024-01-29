@@ -22,13 +22,6 @@ except:
     displayAudioError = True
     audioMessagePressed = False
 
-if os.path.isdir('gamesaves'):
-    global gameSaves
-    gameSaves = os.listdir('gamesaves')
-    print(gameSaves)
-else:
-    os.mkdir('gamesaves')
-
 loadMenu = True
 menu = 'main'
 ButtonsListOffset = 0
@@ -133,6 +126,13 @@ def menuEquals(menu_set): # changes the menu to menu_set
     if menu == 'new':
         difficulty = 'Easy'
         typedText = ''
+    if menu == 'play':
+        if os.path.isdir('gamesaves'):
+            global gameSaves
+            gameSaves = os.listdir('gamesaves')
+            print(gameSaves)
+        else:
+            os.mkdir('gamesaves')
     ButtonsListOffset = 0
 
 
@@ -195,6 +195,10 @@ def createFile(): # creates a game file
     file.write(f'firstplaythroughTrue\n')
     for x in range(2):
         file.write(f'None\n')
+    global gameSaves
+    gameSaves = os.listdir('gamesaves')
+    print(gameSaves)
+    loadFile(f'{typedText}.txt')
 
 
 def loadFile(file): # loads the chosen game file
@@ -206,6 +210,7 @@ def loadFile(file): # loads the chosen game file
     firstTimeRun = True
     with open(f"gamesaves/{file}", "r") as f:
         fileLine = [line.strip() for line in f]
+        print(fileLine)
     if fileLine[1] == "firstplaythroughFalse":
         playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
         map = []
@@ -407,9 +412,11 @@ def renderItem(spawnedItems, amount):
                     if playerInventory[0] == []:
                         playerInventory[0] = spawnedItems[x]
                         spawnedItems.pop(x)
+                        break
                     elif playerInventory[1] == []:
                         playerInventory[1] = spawnedItems[x]
                         spawnedItems.pop(x)
+                        break
                     else:
                         print("inventory full")
 
@@ -542,8 +549,8 @@ while True:
                     print(playerInventory)
                 if event.key == pygame.K_e:
                     CollectItem = True
-            # if event.key == pygame.K_F11: - disabled due to issues with collision and player position.
-            #     toggleFullscreen()
+            if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
+                toggleFullscreen()
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_SPACE:
                 if jumping == True:
