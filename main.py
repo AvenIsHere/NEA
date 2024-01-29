@@ -11,6 +11,8 @@ pygame.init()
 screen = pygame.display.set_mode((1152, 648))
 pygame.display.set_caption('NEA')
 font = pygame.font.Font(None, 32)
+font2 = pygame.font.Font(None, 24)
+font3 = pygame.font.Font(None, 12)
 isFullscreen = False
 displayAudioError = False
 audioMessagePressed = False
@@ -95,16 +97,19 @@ PresetMaps = [
      '-------     ---']
 ]
 
-powerups = [['Increased speed', (0,0,200)]
+powerups = [['Increased speed', (0,0,200)],
+            ['Damage x2', (0,0,200)]
 
 ]
 
-weapons = [['Gun', (200,0,0)]
+weapons = [['Gun', (200,0,0)],
+           ['Sword', (200,0,0)]
 
 ]
+
+playerInventory = [[],[]]
 
 inGame = False
-
 
 def button(text, position, size, colour, action=None, *args): # draws a button on screen with optional function
     global mouseNotUp
@@ -342,7 +347,7 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
                                            ((screen.get_height() / 20) * (y)) + playerPosition[1],
                                            screen.get_width() / 20 + 1, screen.get_height() / 20 + 1))
             tile[x].append([pygame.draw.rect(screen, tileColour, tileRect[x][y]), (255, 0, 0)])
-    renderItem(spawnedItems, 20)
+    renderItem(spawnedItems, len(spawnedItems))
     pygame.draw.rect(screen, (0, 255, 0), player)
 
 spawnedItems = []
@@ -354,7 +359,7 @@ def spawnItem(type):
     print("map len "+str(len(map))+" "+str(len(map[0])))
     isDone = False
     while isDone == False:
-        if map[location[0]][location[1]] == map[location[0]][-1]:
+        if location[1] == 64:
             if map[location[0]][location[1]] == GRID_COLOR or map[location[0]][location[1]] == WALL_COLOR or map[location[0]][location[1]] == FLOOR_NEXT_COL:
                 location = (random.randint(0, 66), random.randint(0, 64))
             else:
@@ -381,36 +386,54 @@ def renderItem(spawnedItems, amount):
             pygame.draw.rect(screen,powerups[spawnedItems[x][0]][1],itemsRendered[-1])
         elif spawnedItems[x][1] == "weapon":
             pygame.draw.rect(screen, weapons[spawnedItems[x][0]][1], itemsRendered[-1])
+        if abs(player.x - itemsRendered[-1][0]) < 100 and abs(player.y - itemsRendered[-1][1]) < 100:
+            if spawnedItems[x][1] == "powerup":
+                itemText = font2.render(powerups[spawnedItems[x][0]][0], True, (30,30,30))
+                itemTextRect = itemText.get_rect(center=(itemsRendered[-1].center[0],itemsRendered[-1].center[1] - 20))
+                itemText2 = font3.render("Press E to pick up", True, (30,30,30))
+                itemTextRect2 = itemText2.get_rect(center=(itemsRendered[-1].center[0],itemsRendered[-1].center[1] - 35))
+                screen.blit(itemText, itemTextRect)
+                screen.blit(itemText2, itemTextRect2)
+            if spawnedItems[x][1] == "weapon":
+                itemText = font2.render(weapons[spawnedItems[x][0]][0], True, (30,30,30))
+                itemTextRect = itemText.get_rect(center=(itemsRendered[-1].center[0],itemsRendered[-1].center[1] - 20))
+                itemText2 = font3.render("Press E to pick up", True, (30,30,30))
+                itemTextRect2 = itemText2.get_rect(center=(itemsRendered[-1].center[0],itemsRendered[-1].center[1] - 35))
+                screen.blit(itemText, itemTextRect)
+                screen.blit(itemText2, itemTextRect2)
+            if CollectItem:
+                print(f"Pop {spawnedItems[x]}")
+                if spawnedItems[x][1] == "weapon":
+                    if playerInventory[0] == []:
+                        playerInventory[0] = spawnedItems[x]
+                        spawnedItems.pop(x)
+                    elif playerInventory[1] == []:
+                        playerInventory[1] = spawnedItems[x]
+                        spawnedItems.pop(x)
+                    else:
+                        print("inventory full")
 
 def jump(): # Is called when the player jumps, calculates the player movement up and down when jumping, as well as stopping the jump when landing.
     global player
     global jumpCount
     global playerPosition
     global jumping
-    if jumpCount >= -10:
-        neg = 1
-        if jumpCount < 0:
-            neg = -1
-
-        move = pygame.math.Vector2(0, -(jumpCount ** 2 * 0.1 * neg))
-        nextPlayer_y = player.move(0, move.y)
-        for x, tileRectRow in enumerate(tileRect):
-            for y, tileRectRowColumn in enumerate(tileRectRow):
-                if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL) and tileRect[x][y].top < nextPlayer_y.top:
-                    jumpCount = -1
-
-                if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL) and tileRect[x][y].bottom > nextPlayer_y.bottom:
-                    if move.y > 0:  # moving down
-                        move.y = 0
-                    elif move.y < 0:  # moving up
-                        move.y = 0
-                    break
-
-        playerPosition[1] -= move.y
-        jumpCount -= 1
+    if jumpCount < 20:
+        move = pygame.math.Vector2(0, -((screen.get_width() / 800) * (0.1 * jumpCount)) - gravity - (screen.get_width() / 800))
     else:
-        jumping = False
-        jumpCount = 10
+        move = pygame.math.Vector2(0, -(screen.get_width() / 600) - gravity - (screen.get_width() / 800))
+    nextPlayer_y = player.move(0, move.y)
+    for x, tileRectRow in enumerate(tileRect):
+        for y, tileRectRowColumn in enumerate(tileRectRow):
+            if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL) and tileRect[x][y].top < nextPlayer_y.top:
+                if move.y > 0:  # moving down
+                    move.y = 0
+                elif move.y < 0:  # moving up
+                    move.y = 0
+                break
+
+    playerPosition[1] -= move.y
+    jumpCount += 1
 
 
 playerPosition = []
@@ -485,6 +508,7 @@ def saveFile(): # Saves the current file, used when exiting the game
     with open("gamesaves/" + currentFile, 'w') as file:
         file.writelines(fileLine)
 
+CollectItem = False
 while True:
     pygame.display.update()
 
@@ -510,11 +534,22 @@ while True:
                 if event.key == pygame.K_SPACE:
                     if jumping == False:
                         jumping = True
-                        jumpCount = 10
+                        jumpCount = 0
+
                 if event.key == pygame.K_h:
                     playerPosition = [screen.get_width(), 0]
+                if event.key == pygame.K_i:
+                    print(playerInventory)
+                if event.key == pygame.K_e:
+                    CollectItem = True
             # if event.key == pygame.K_F11: - disabled due to issues with collision and player position.
             #     toggleFullscreen()
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_SPACE:
+                if jumping == True:
+                    jumping = False
+                    jumpCount = 0
+
 
         if event.type == pygame.MOUSEWHEEL:
             if menu == 'play' and loadMenu == True and menuNameTextRect.centery + (
@@ -546,7 +581,7 @@ while True:
         if jumping:
             jump()
 
-        move = pygame.math.Vector2(right - left, down - up)
+        move = pygame.math.Vector2(right - left, 0)
         if not jumping:
             move.y -= gravity
         if move.length_squared() > 0:
@@ -574,19 +609,19 @@ while True:
                         # print("Y collision")
                         break
 
-            if playerPosition[0] < -3268.8:
+            if playerPosition[0] <= -3268.8:
                 if move.x > 0:
                     move.x = 0
                 playerPosition[0] = -3268.8
-            if playerPosition[0] > 561:
+            if playerPosition[0] >= 561:
                 if move.x < 0:
                     move.x = 0
                 playerPosition[0] = 561
-            if playerPosition[1] < -1776:
+            if playerPosition[1] <= -1776:
                 if move.y > 0:
                     move.y = 0
                 playerPosition[1] = -1776
-            if playerPosition[1] > 315.2:
+            if playerPosition[1] >= 315.2:
                 if move.y < 0:
                     move.y = 0
                 playerPosition[1] = 315.2
@@ -595,6 +630,9 @@ while True:
             playerPosition[0] -= move.x
             playerPosition[1] -= move.y
             fileLine[2] = playerPosition
+
+    if CollectItem:
+        CollectItem = False
 
     if displayAudioError == True and audioMessagePressed == False:
         audioErrorText = font.render("Audio Error. Press to dismiss.", True, (255, 0, 0))
@@ -605,9 +643,9 @@ while True:
 
 # FIXME: Player sometimes goes one pixel into the wall. No clue what causes it, it appears to be random. Player cannot move in other axis until moving away from the wall.
 # FIXME: Player moves up and down when at the bottom of the map. Just visual, causes no gameplay issues.
+# FIXME: When player tries to collect an item, the game crashes. Something about an index error.
 
 # Todo: Make sure all platforms are accessible
-# Todo: Properly adjust player speed, jump height, then remove up/down movement.
 # Todo: Add sprites/assets
 # Todo: Add levels
 # Todo: Add items
