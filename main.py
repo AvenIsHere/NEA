@@ -354,6 +354,12 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
             tile[x].append([pygame.draw.rect(screen, tileColour, tileRect[x][y]), (255, 0, 0)])
     renderItem(spawnedItems, len(spawnedItems))
     pygame.draw.rect(screen, (0, 255, 0), player)
+    renderInventory()
+
+def draw_rect_alpha(surface, color, rect): # sourced from https://stackoverflow.com/questions/6339057/draw-a-transparent-rectangles-and-polygons-in-pygame
+    shape_surf = pygame.Surface(pygame.Rect(rect).size, pygame.SRCALPHA)
+    pygame.draw.rect(shape_surf, color, shape_surf.get_rect())
+    surface.blit(shape_surf, rect)
 
 spawnedItems = []
 
@@ -384,6 +390,7 @@ def spawnItem(type):
 
 itemsRendered = []
 def renderItem(spawnedItems, amount):
+    global speed, timeRemainingSpeedBoost
     itemsRendered = []
     for x in range(amount):
         itemsRendered.append(pygame.Rect(((screen.get_width() / 20) * (spawnedItems[x][2][0])) + playerPosition[0],((screen.get_height() / 20) * (spawnedItems[x][2][1])) + playerPosition[1],screen.get_width()/30,screen.get_height()/30))
@@ -419,6 +426,15 @@ def renderItem(spawnedItems, amount):
                         break
                     else:
                         print("inventory full")
+                if spawnedItems[x][1] == "powerup" and spawnedItems[x][0] == 0:
+                    if speed == 600:
+                        speed = 460
+                        timeRemainingSpeedBoost = 1000
+                        spawnedItems.pop(x)
+                        break
+                    else:
+                        print("Speed Boost already applied.")
+
 
 def jump(): # Is called when the player jumps, calculates the player movement up and down when jumping, as well as stopping the jump when landing.
     global player
@@ -446,6 +462,28 @@ def jump(): # Is called when the player jumps, calculates the player movement up
 playerPosition = []
 jumping = False
 
+itemSelected = 1
+
+def renderInventory():
+    global itemSelected
+    inventoryBackground = pygame.Rect(screen.get_width()/2 - 100, screen.get_height() - 100, 200, 80)
+    selectedItem1Rect = pygame.Rect(screen.get_width() / 2 - 100, screen.get_height() - 100, 100, 80)
+    selectedItem2Rect = pygame.Rect(screen.get_width() / 2, screen.get_height() - 100, 100, 80)
+    item1Inventory = pygame.Rect(screen.get_width() / 2 - 50 - 15, screen.get_height() - 60 - 12.5, 30, 25)
+    item2Inventory = pygame.Rect(screen.get_width() / 2 + 50 - 15, screen.get_height() - 60 - 12.5, 30, 25)
+    draw_rect_alpha(screen, (0,0,0,128), inventoryBackground)
+    if itemSelected == 1:
+        draw_rect_alpha(screen, (200,200,200,128), selectedItem1Rect)
+        if pygame.mouse.get_pressed()[0] and selectedItem2Rect.collidepoint(pygame.mouse.get_pos()):
+            itemSelected = 2
+    if itemSelected == 2:
+        draw_rect_alpha(screen, (200, 200, 200, 128), selectedItem2Rect)
+        if pygame.mouse.get_pressed()[0] and selectedItem1Rect.collidepoint(pygame.mouse.get_pos()):
+            itemSelected = 1
+    if playerInventory[0] != []:
+        pygame.draw.rect(screen, (200,0,0), item1Inventory)
+    if playerInventory[1] != []:
+        pygame.draw.rect(screen, (200, 0, 0), item2Inventory)
 
 def update(screen, cells, size, with_progress=False): # Procedural generation, unused.
     global map
@@ -516,6 +554,10 @@ def saveFile(): # Saves the current file, used when exiting the game
         file.writelines(fileLine)
 
 CollectItem = False
+
+speed = 600
+timeRemainingSpeedBoost = 0
+
 while True:
     pygame.display.update()
 
@@ -592,7 +634,7 @@ while True:
         if not jumping:
             move.y -= gravity
         if move.length_squared() > 0:
-            move.scale_to_length(screen.get_width() / 800)
+            move.scale_to_length(screen.get_width() / speed)
 
             nextPlayer_x = player.move(move.x, 0)
             for x, tileRectRow in enumerate(tileRect):
@@ -638,6 +680,11 @@ while True:
             playerPosition[1] -= move.y
             fileLine[2] = playerPosition
 
+            if timeRemainingSpeedBoost > 0:
+                if timeRemainingSpeedBoost == 1:
+                    speed = 600
+                timeRemainingSpeedBoost -= 1
+
     if CollectItem:
         CollectItem = False
 
@@ -650,17 +697,17 @@ while True:
 
 # FIXME: Player sometimes goes one pixel into the wall. No clue what causes it, it appears to be random. Player cannot move in other axis until moving away from the wall.
 # FIXME: Player moves up and down when at the bottom of the map. Just visual, causes no gameplay issues.
-# FIXME: When player tries to collect an item, the game crashes. Something about an index error.
+# FIXME: Game crashes after making a game file and then trying to load that game file. For some reason loading the game file that was just created does not work.
 
-# Todo: Make sure all platforms are accessible
 # Todo: Add sprites/assets
-# Todo: Add levels
 # Todo: Add items
 # Todo: Add Enemies
 # Todo: Add pathfinding for enemies
 # Todo: Add health
 # Todo: Add death screen
-# Todo: Add doors
 
 # Considerations for V2:
 # Add random player spawning
+# Make movement more smooth
+# Add doors
+# Add levels
