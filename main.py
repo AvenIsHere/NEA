@@ -100,6 +100,11 @@ weapons = [['Gun', (200,0,0)],
 
 ]
 
+enemies = [['Zombie', (0,200,0)],
+           ['Wizard', (0,200,0)]
+
+]
+
 playerInventory = [[],[]]
 
 inGame = False
@@ -330,6 +335,7 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
         for x in range(20):
             spawnItem("powerup")
             spawnItem("weapon")
+        spawnEnemies()
 
     #    running = 34
     # if mapGenerated:
@@ -353,6 +359,7 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
                                            screen.get_width() / 20 + 1, screen.get_height() / 20 + 1))
             tile[x].append([pygame.draw.rect(screen, tileColour, tileRect[x][y]), (255, 0, 0)])
     renderItem(spawnedItems, len(spawnedItems))
+    renderEnemies()
     pygame.draw.rect(screen, (0, 255, 0), player)
     renderInventory()
 
@@ -388,12 +395,13 @@ def spawnItem(type):
     elif type == "weapon":
         spawnedItems.append([random.randint(0, len(weapons)-1), type, location])
 
-itemsRendered = []
 def renderItem(spawnedItems, amount):
     global speed, timeRemainingSpeedBoost
     itemsRendered = []
+    width = screen.get_width() / 30
+    height = screen.get_height() / 30
     for x in range(amount):
-        itemsRendered.append(pygame.Rect(((screen.get_width() / 20) * (spawnedItems[x][2][0])) + playerPosition[0],((screen.get_height() / 20) * (spawnedItems[x][2][1])) + playerPosition[1],screen.get_width()/30,screen.get_height()/30))
+        itemsRendered.append(pygame.Rect(((screen.get_width() / 20) * (spawnedItems[x][2][0])) + playerPosition[0],((screen.get_height() / 20) * (spawnedItems[x][2][1])) + playerPosition[1] + screen.get_height()/20 - height +1,width,height))
         if spawnedItems[x][1] == "powerup":
             pygame.draw.rect(screen,powerups[spawnedItems[x][0]][1],itemsRendered[-1])
         elif spawnedItems[x][1] == "weapon":
@@ -462,10 +470,44 @@ def jump(): # Is called when the player jumps, calculates the player movement up
 playerPosition = []
 jumping = False
 
+spawnedEnemies = []
+def spawnEnemies():
+    for x in range(20):
+        location = (random.randint(0, 66), random.randint(0, 64))
+        print(location)
+        print("map len " + str(len(map)) + " " + str(len(map[0])))
+        isDone = False
+        while isDone == False:
+            if location[1] == 64:
+                if map[location[0]][location[1]] == GRID_COLOR or map[location[0]][location[1]] == WALL_COLOR or map[location[0]][location[1]] == FLOOR_NEXT_COL:
+                    location = (random.randint(0, 66), random.randint(0, 64))
+                else:
+                    isDone = True
+            else:
+                if map[location[0]][location[1] + 1] == FLOOR_COLOR:
+                    location = (random.randint(0, 66), random.randint(0, 64))
+                else:
+                    if map[location[0]][location[1]] == GRID_COLOR or map[location[0]][location[1]] == WALL_COLOR or map[location[0]][location[1]] == FLOOR_NEXT_COL:
+                        location = (random.randint(0, 66), random.randint(0, 64))
+                    else:
+                        isDone = True
+        enemyType = random.randint(0, len(enemies)-1)
+        spawnedEnemies.append([enemies[enemyType][0], enemies[enemyType][1], location])
+
+enemiesRendered = []
+def renderEnemies():
+    enemiesRendered = []
+    if len(spawnedEnemies) > 0:
+        for x in range (len(spawnedEnemies)):
+            enemiesRendered.append(pygame.Rect(((screen.get_width() / 20) * (spawnedEnemies[x][2][0])) + playerPosition[0],
+                                             ((screen.get_height() / 20) * (spawnedEnemies[x][2][1])) + playerPosition[1] + screen.get_height()/20 - (screen.get_height()/30) +1,
+                                             screen.get_width() / 30, screen.get_height() / 30))
+            pygame.draw.rect(screen, spawnedEnemies[x][1], enemiesRendered[-1])
+
 itemSelected = 1
 
 def renderInventory():
-    global itemSelected
+    global itemSelected, mouseNotUp
     inventoryBackground = pygame.Rect(screen.get_width()/2 - 100, screen.get_height() - 100, 200, 80)
     selectedItem1Rect = pygame.Rect(screen.get_width() / 2 - 100, screen.get_height() - 100, 100, 80)
     selectedItem2Rect = pygame.Rect(screen.get_width() / 2, screen.get_height() - 100, 100, 80)
@@ -474,12 +516,24 @@ def renderInventory():
     draw_rect_alpha(screen, (0,0,0,128), inventoryBackground)
     if itemSelected == 1:
         draw_rect_alpha(screen, (200,200,200,128), selectedItem1Rect)
-        if pygame.mouse.get_pressed()[0] and selectedItem2Rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and selectedItem2Rect.collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False:
             itemSelected = 2
+            mouseNotUp = True
+        if pygame.mouse.get_pressed()[0] and selectedItem1Rect.collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False and playerInventory[0] != []:
+            spawnedItems.append([playerInventory[0][0], playerInventory[0][1], ((((screen.get_width()/2) - playerPosition[0])/ (screen.get_width()/20))//1, (((screen.get_height()/2) - playerPosition[1])/ (screen.get_height()/20))//1)])
+            print(spawnedItems[-1][2])
+            playerInventory[0] = []
+            mouseNotUp = True
     if itemSelected == 2:
         draw_rect_alpha(screen, (200, 200, 200, 128), selectedItem2Rect)
-        if pygame.mouse.get_pressed()[0] and selectedItem1Rect.collidepoint(pygame.mouse.get_pos()):
+        if pygame.mouse.get_pressed()[0] and selectedItem1Rect.collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False:
             itemSelected = 1
+            mouseNotUp = True
+        if pygame.mouse.get_pressed()[0] and selectedItem2Rect.collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False and playerInventory[1] != []:
+            spawnedItems.append([playerInventory[1][0], playerInventory[1][1], ((((screen.get_width()/2) - playerPosition[0])/ (screen.get_width()/20))//1, (((screen.get_height()/2) - playerPosition[1])/ (screen.get_height()/20))//1)])
+            print(spawnedItems[-1][2])
+            playerInventory[1] = []
+            mouseNotUp = True
     if playerInventory[0] != []:
         pygame.draw.rect(screen, (200,0,0), item1Inventory)
     if playerInventory[1] != []:
