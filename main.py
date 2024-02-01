@@ -5,6 +5,10 @@ import numpy as np
 import time
 import os
 import random
+import pathfinding
+from pathfinding.core.diagonal_movement import DiagonalMovement
+from pathfinding.core.grid import Grid
+from pathfinding.finder.a_star import AStarFinder
 
 pygame.init()
 
@@ -32,6 +36,10 @@ GRID_COLOR = (0, 0, 0)
 FLOOR_COLOR = (255, 255, 255)
 FLOOR_NEXT_COL = (0, 0, 255)
 gravity = -1.5
+screenWidth = screen.get_width()
+screenHeight = screen.get_height()
+tileWidth = screenWidth/20
+tileHeight = screenHeight/20
 PresetMaps = [
     ['-----------   -',
      '              -',
@@ -161,9 +169,9 @@ def toggleFullscreen(): # toggles fullscreen, currently unused.
         pygame.display.set_mode((1152, 648), pygame.RESIZABLE)
         isFullscreen = False
     if inGame and 'player' in globals():
-        player = pygame.Rect(screen.get_width() / 2 - (screen.get_width() / 2) / 40,
-                             screen.get_height() / 2 - (screen.get_height() / 2) / 40, (screen.get_width() / 2) / 20,
-                             (screen.get_height() / 2) / 20)
+        player = pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
+                             screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
+                             (screenHeight / 2) / 20)
 
 
 def drawTextBox(text, position, size, colour, borderColour, borderSize, typedText): # draws a text box
@@ -245,7 +253,7 @@ def mainMenu(menu): # Shows and handles almost everything related to the main me
         menuNameText = font.render("Settings", True, (255, 255, 255))
     elif menu == 'new':
         menuNameText = font.render("New Game", True, (255, 255, 255))
-    menuNameTextRect = menuNameText.get_rect(center=(screen.get_width() / 2, screen.get_height() / 6))
+    menuNameTextRect = menuNameText.get_rect(center=(screenWidth / 2, screenHeight / 6))
     if menu == 'main':
         buttonsList = [['Play', menuEquals, 'play'], ['Settings', menuEquals, 'settings'], ['Quit', pygame.quit]]
     elif menu == 'settings':
@@ -285,22 +293,22 @@ def mainMenu(menu): # Shows and handles almost everything related to the main me
             button(buttonsList[i][0],
                    (menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))),
                    (150, 37.5), (100, 100, 100), buttonsList[i][1], buttonsList[i][2])
-    TextBackground = pygame.Rect(0, 0, screen.get_width(), menuNameTextRect.centery + 15)
+    TextBackground = pygame.Rect(0, 0, screenWidth, menuNameTextRect.centery + 15)
     pygame.draw.rect(screen, (20, 20, 20), TextBackground)
     screen.blit(menuNameText, menuNameTextRect)
 
 mapGenerated = False
 
 def playGame(file): # Handles most of the gameplay TODO: Split into multiple functions
-    global playerPosition, fileLine, firstTimeRun, map, player, tileRect, tile, running, mapGenerated, cells, size
+    global playerPosition, playerGridPosition, fileLine, firstTimeRun, map, player, tileRect, tile, running, mapGenerated, cells, size
     if firstTimeRun == True:
         mapGenerated = False
         with open(f"gamesaves/{file}", "r") as f:
             fileLine = [line.strip() for line in f]
         firstTimeRun = False
-        player = pygame.Rect(screen.get_width() / 2 - (screen.get_width() / 2) / 40,
-                             screen.get_height() / 2 - (screen.get_height() / 2) / 40, (screen.get_width() / 2) / 20,
-                             (screen.get_height() / 2) / 20)
+        player = pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
+                             screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
+                             (screenHeight / 2) / 20)
         size = 10
         if fileLine[1] == "firstplaythroughTrue":
             playerPosition = [90, -10]
@@ -332,10 +340,20 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
                                 map[LevelY * len(PresetMaps[0]) + y].append(FLOOR_COLOR)
                     if map[-1] == []:
                         map.pop()
+        isOnGround()
+        playerGridPosition = [int((((screenWidth/2) - playerPosition[0])/tileWidth)//1), int((((screenHeight/2) - playerPosition[1])/ tileHeight)//1)]
+        print('playerGridPosition: ', playerGridPosition)
         for x in range(20):
             spawnItem("powerup")
             spawnItem("weapon")
         spawnEnemies()
+        grid = Grid(matrix=onGroundMap)
+        start = grid.node(spawnedEnemies[0][2][0], spawnedEnemies[0][2][1])
+        end = grid.node(playerGridPosition[0], playerGridPosition[1])
+        finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
+        path, runs = finder.find_path(start, end, grid)
+        print('operations:', runs, 'path length:', len(path))
+        print(grid.grid_str(path=path, start=start, end=end))
 
     #    running = 34
     # if mapGenerated:
@@ -344,7 +362,7 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
         #     cells = update(screen, cells, size, with_progress=True)
         #     running -= 1
     # backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
-    # backgroundImage = pygame.transform.scale(backgroundImage, (screen.get_width(), screen.get_height()))
+    # backgroundImage = pygame.transform.scale(backgroundImage, (screenWidth, screenHeight))
     # screen.blit(backgroundImage, (0, 0))
     # print("map len " + str(len(map)) + " " + str(len(map[0])))
     screen.fill((50, 50, 50))
@@ -354,14 +372,15 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
         tileRect.append([])
         tile.append([])
         for y, tileColour in enumerate(colour, start=0):
-            tileRect[x].append(pygame.Rect(((screen.get_width() / 20) * (x)) + playerPosition[0],
-                                           ((screen.get_height() / 20) * (y)) + playerPosition[1],
-                                           screen.get_width() / 20 + 1, screen.get_height() / 20 + 1))
+            tileRect[x].append(pygame.Rect(((tileWidth) * (x)) + playerPosition[0],
+                                           ((tileHeight) * (y)) + playerPosition[1],
+                                           tileWidth + 1, tileHeight + 1))
             tile[x].append([pygame.draw.rect(screen, tileColour, tileRect[x][y]), (255, 0, 0)])
     renderItem(spawnedItems, len(spawnedItems))
     renderEnemies()
     pygame.draw.rect(screen, (0, 255, 0), player)
     renderInventory()
+    playerGridPosition = [(((screenWidth/2) - playerPosition[0])/ tileWidth)//1, ((screenHeight/2 - playerPosition[1])/ tileHeight)//1]
 
 def draw_rect_alpha(surface, color, rect): # sourced from https://stackoverflow.com/questions/6339057/draw-a-transparent-rectangles-and-polygons-in-pygame
     shape_surf = pygame.Surface(pygame.Rect(rect).size, pygame.SRCALPHA)
@@ -398,10 +417,10 @@ def spawnItem(type):
 def renderItem(spawnedItems, amount):
     global speed, timeRemainingSpeedBoost
     itemsRendered = []
-    width = screen.get_width() / 30
-    height = screen.get_height() / 30
+    width = screenWidth / 30
+    height = screenHeight / 30
     for x in range(amount):
-        itemsRendered.append(pygame.Rect(((screen.get_width() / 20) * (spawnedItems[x][2][0])) + playerPosition[0],((screen.get_height() / 20) * (spawnedItems[x][2][1])) + playerPosition[1] + screen.get_height()/20 - height +1,width,height))
+        itemsRendered.append(pygame.Rect(((tileWidth) * (spawnedItems[x][2][0])) + playerPosition[0],((tileHeight) * (spawnedItems[x][2][1])) + playerPosition[1] + tileHeight - height +1,width,height))
         if spawnedItems[x][1] == "powerup":
             pygame.draw.rect(screen,powerups[spawnedItems[x][0]][1],itemsRendered[-1])
         elif spawnedItems[x][1] == "weapon":
@@ -450,9 +469,9 @@ def jump(): # Is called when the player jumps, calculates the player movement up
     global playerPosition
     global jumping
     if jumpCount < 20:
-        move = pygame.math.Vector2(0, -((screen.get_width() / 800) * (0.1 * jumpCount)) - gravity - (screen.get_width() / 800))
+        move = pygame.math.Vector2(0, -((screenWidth / 800) * (0.1 * jumpCount)) - gravity - (screenWidth / 800))
     else:
-        move = pygame.math.Vector2(0, -(screen.get_width() / 600) - gravity - (screen.get_width() / 800))
+        move = pygame.math.Vector2(0, -(screenWidth / 600) - gravity - (screenWidth / 800))
     nextPlayer_y = player.move(0, move.y)
     for x, tileRectRow in enumerate(tileRect):
         for y, tileRectRowColumn in enumerate(tileRectRow):
@@ -478,19 +497,10 @@ def spawnEnemies():
         print("map len " + str(len(map)) + " " + str(len(map[0])))
         isDone = False
         while isDone == False:
-            if location[1] == 64:
-                if map[location[0]][location[1]] == GRID_COLOR or map[location[0]][location[1]] == WALL_COLOR or map[location[0]][location[1]] == FLOOR_NEXT_COL:
-                    location = (random.randint(0, 66), random.randint(0, 64))
-                else:
-                    isDone = True
+            if location in onGround:
+                isDone = True
             else:
-                if map[location[0]][location[1] + 1] == FLOOR_COLOR:
-                    location = (random.randint(0, 66), random.randint(0, 64))
-                else:
-                    if map[location[0]][location[1]] == GRID_COLOR or map[location[0]][location[1]] == WALL_COLOR or map[location[0]][location[1]] == FLOOR_NEXT_COL:
-                        location = (random.randint(0, 66), random.randint(0, 64))
-                    else:
-                        isDone = True
+                location = (random.randint(0, 66), random.randint(0, 64))
         enemyType = random.randint(0, len(enemies)-1)
         spawnedEnemies.append([enemies[enemyType][0], enemies[enemyType][1], location])
 
@@ -499,20 +509,22 @@ def renderEnemies():
     enemiesRendered = []
     if len(spawnedEnemies) > 0:
         for x in range (len(spawnedEnemies)):
-            enemiesRendered.append(pygame.Rect(((screen.get_width() / 20) * (spawnedEnemies[x][2][0])) + playerPosition[0],
-                                             ((screen.get_height() / 20) * (spawnedEnemies[x][2][1])) + playerPosition[1] + screen.get_height()/20 - (screen.get_height()/30) +1,
-                                             screen.get_width() / 30, screen.get_height() / 30))
+            enemiesRendered.append(pygame.Rect(((tileWidth) * (spawnedEnemies[x][2][0])) + playerPosition[0],
+                                             ((tileHeight) * (spawnedEnemies[x][2][1])) + playerPosition[1] + tileHeight - (screenHeight/30) +1,
+                                             screenWidth / 30, screenHeight / 30))
             pygame.draw.rect(screen, spawnedEnemies[x][1], enemiesRendered[-1])
 
 itemSelected = 1
 
+
+
 def renderInventory():
-    global itemSelected, mouseNotUp
-    inventoryBackground = pygame.Rect(screen.get_width()/2 - 100, screen.get_height() - 100, 200, 80)
-    selectedItem1Rect = pygame.Rect(screen.get_width() / 2 - 100, screen.get_height() - 100, 100, 80)
-    selectedItem2Rect = pygame.Rect(screen.get_width() / 2, screen.get_height() - 100, 100, 80)
-    item1Inventory = pygame.Rect(screen.get_width() / 2 - 50 - 15, screen.get_height() - 60 - 12.5, 30, 25)
-    item2Inventory = pygame.Rect(screen.get_width() / 2 + 50 - 15, screen.get_height() - 60 - 12.5, 30, 25)
+    global itemSelected, mouseNotUp, playerGridPosition
+    inventoryBackground = pygame.Rect(screenWidth/2 - 100, screenHeight - 100, 200, 80)
+    selectedItem1Rect = pygame.Rect(screenWidth / 2 - 100, screenHeight - 100, 100, 80)
+    selectedItem2Rect = pygame.Rect(screenWidth / 2, screenHeight - 100, 100, 80)
+    item1Inventory = pygame.Rect(screenWidth / 2 - 50 - 15, screenHeight - 60 - 12.5, 30, 25)
+    item2Inventory = pygame.Rect(screenWidth / 2 + 50 - 15, screenHeight - 60 - 12.5, 30, 25)
     draw_rect_alpha(screen, (0,0,0,128), inventoryBackground)
     if itemSelected == 1:
         draw_rect_alpha(screen, (200,200,200,128), selectedItem1Rect)
@@ -520,7 +532,7 @@ def renderInventory():
             itemSelected = 2
             mouseNotUp = True
         if pygame.mouse.get_pressed()[0] and selectedItem1Rect.collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False and playerInventory[0] != []:
-            spawnedItems.append([playerInventory[0][0], playerInventory[0][1], ((((screen.get_width()/2) - playerPosition[0])/ (screen.get_width()/20))//1, (((screen.get_height()/2) - playerPosition[1])/ (screen.get_height()/20))//1)])
+            spawnedItems.append([playerInventory[0][0], playerInventory[0][1], (playerGridPosition[0], playerGridPosition[1])])
             print(spawnedItems[-1][2])
             playerInventory[0] = []
             mouseNotUp = True
@@ -530,7 +542,7 @@ def renderInventory():
             itemSelected = 1
             mouseNotUp = True
         if pygame.mouse.get_pressed()[0] and selectedItem2Rect.collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False and playerInventory[1] != []:
-            spawnedItems.append([playerInventory[1][0], playerInventory[1][1], ((((screen.get_width()/2) - playerPosition[0])/ (screen.get_width()/20))//1, (((screen.get_height()/2) - playerPosition[1])/ (screen.get_height()/20))//1)])
+            spawnedItems.append([playerInventory[1][0], playerInventory[1][1], ((((screenWidth/2) - playerPosition[0])/ (tileWidth))//1, (((screenHeight/2) - playerPosition[1])/ (tileHeight))//1)])
             print(spawnedItems[-1][2])
             playerInventory[1] = []
             mouseNotUp = True
@@ -612,6 +624,33 @@ CollectItem = False
 speed = 600
 timeRemainingSpeedBoost = 0
 
+def isOnGround():
+    global onGround, onGroundMap
+    onGround = []
+    for x in range(len(map)):
+        for y in range(len(map[0])):
+            if y == 64:
+                if map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL:
+                    pass
+                else:
+                    onGround.append((x,y))
+            else:
+                if map[x][y + 1] == FLOOR_COLOR:
+                    pass
+                else:
+                    if map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL:
+                        pass
+                    else:
+                        onGround.append((x,y))
+    onGroundMap = []
+    for x in range(len(map)):
+        onGroundMap.append([])
+        for y in range(len(map)):
+            if (y,x) in onGround:
+                onGroundMap[x].append(1)
+            else:
+                onGroundMap[x].append(0)
+
 while True:
     pygame.display.update()
 
@@ -640,7 +679,7 @@ while True:
                         jumpCount = 0
 
                 if event.key == pygame.K_h:
-                    playerPosition = [screen.get_width(), 0]
+                    playerPosition = [screenWidth, 0]
                 if event.key == pygame.K_i:
                     print(playerInventory)
                 if event.key == pygame.K_e:
@@ -656,12 +695,12 @@ while True:
 
         if event.type == pygame.MOUSEWHEEL:
             if menu == 'play' and loadMenu == True and menuNameTextRect.centery + (
-                    50 + ((len(buttonsList) - 1) * 50)) > screen.get_height():
+                    50 + ((len(buttonsList) - 1) * 50)) > screenHeight:
                 ButtonsListOffset += event.y * 10
                 if ButtonsListOffset > 0:
                     ButtonsListOffset = 0
                 if menuNameTextRect.centery + ButtonsListOffset + (
-                        50 + ((len(buttonsList) - 1) * 50)) + 30 < screen.get_height():
+                        50 + ((len(buttonsList) - 1) * 50)) + 30 < screenHeight:
                     ButtonsListOffset -= event.y * 10
     screen.fill((20, 20, 20))
 
@@ -688,7 +727,7 @@ while True:
         if not jumping:
             move.y -= gravity
         if move.length_squared() > 0:
-            move.scale_to_length(screen.get_width() / speed)
+            move.scale_to_length(screenWidth / speed)
 
             nextPlayer_x = player.move(move.x, 0)
             for x, tileRectRow in enumerate(tileRect):
@@ -744,7 +783,7 @@ while True:
 
     if displayAudioError == True and audioMessagePressed == False:
         audioErrorText = font.render("Audio Error. Press to dismiss.", True, (255, 0, 0))
-        audioErrorTextRect = audioErrorText.get_rect(center=(screen.get_width() / 2, screen.get_height() - 30))
+        audioErrorTextRect = audioErrorText.get_rect(center=(screenWidth / 2, screenHeight - 30))
         screen.blit(audioErrorText, audioErrorTextRect)
         if pygame.mouse.get_pressed()[0] and audioErrorTextRect.collidepoint(pygame.mouse.get_pos()):
             audioMessagePressed = True
@@ -756,7 +795,7 @@ while True:
 # Todo: Add sprites/assets
 # Todo: Add items
 # Todo: Add Enemies
-# Todo: Add pathfinding for enemies
+# Todo: Continue pathfinding
 # Todo: Add health
 # Todo: Add death screen
 
@@ -765,3 +804,4 @@ while True:
 # Make movement more smooth
 # Add doors
 # Add levels
+# Better pathfinding and enemy movement
