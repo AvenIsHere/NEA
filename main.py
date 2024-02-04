@@ -9,6 +9,7 @@ import pathfinding
 from pathfinding.core.diagonal_movement import DiagonalMovement
 from pathfinding.core.grid import Grid
 from pathfinding.finder.a_star import AStarFinder
+from threading import Thread
 
 pygame.init()
 
@@ -299,8 +300,40 @@ def mainMenu(menu): # Shows and handles almost everything related to the main me
 
 mapGenerated = False
 
+inThread = False
+def pathfinding():
+    global enemiesToMove, grid, spawnedEnemies, playerGridPosition, pathGrid, pathTicks, inThread
+    inThread = True
+    # print(playerGridPosition)
+    if pathTicks == 0:
+        enemiesToMove = []
+        grid = Grid(matrix=onGroundMap)
+        for x in range(20):
+            start = grid.node(spawnedEnemies[x][2][0], spawnedEnemies[x][2][1])
+            end = grid.node(playerGridPosition[0], playerGridPosition[1])
+            finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
+            path, runs = finder.find_path(start, end, grid)
+            pathGrid = grid.grid_str(path=path, start=start, end=end).split('\n')
+            for l in range(len(pathGrid)):
+                if 'x' in pathGrid[l]:
+                    for i in reversed(range(len(pathGrid[l]))):
+                        if pathGrid[l][i] == 'x':
+                            n = i
+                    enemiesToMove.append([x, (l, n)])
+        pathTicks = 100
+    # print(enemiesToMove)
+    if enemiesToMove != []:
+        for x in range(len(enemiesToMove)):
+            if spawnedEnemies[enemiesToMove[x][0]][2] != enemiesToMove[x][1]:
+                if spawnedEnemies[enemiesToMove[x][0]][2][1] > enemiesToMove[x][1][1]:
+                    spawnedEnemies[enemiesToMove[x][0]][2][1] -= 0.05
+                if spawnedEnemies[enemiesToMove[x][0]][2][1] < enemiesToMove[x][1][1]:
+                    spawnedEnemies[enemiesToMove[x][0]][2][1] += 0.05
+    pathTicks -= 1
+    inThread = False
+
 def playGame(file): # Handles most of the gameplay TODO: Split into multiple functions
-    global playerPosition, playerGridPosition, fileLine, firstTimeRun, map, player, tileRect, tile, running, mapGenerated, cells, size
+    global playerPosition, playerGridPosition, fileLine, firstTimeRun, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread
     if firstTimeRun == True:
         mapGenerated = False
         with open(f"gamesaves/{file}", "r") as f:
@@ -309,7 +342,9 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
         player = pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
                              screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
                              (screenHeight / 2) / 20)
+        pathTicks = 0
         size = 10
+        enemiesToMove = []
         if fileLine[1] == "firstplaythroughTrue":
             playerPosition = [90, -10]
             fileLine[2] = playerPosition
@@ -347,13 +382,7 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
             spawnItem("powerup")
             spawnItem("weapon")
         spawnEnemies()
-        grid = Grid(matrix=onGroundMap)
-        start = grid.node(spawnedEnemies[0][2][0], spawnedEnemies[0][2][1])
-        end = grid.node(playerGridPosition[0], playerGridPosition[1])
-        finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
-        path, runs = finder.find_path(start, end, grid)
-        print('operations:', runs, 'path length:', len(path))
-        print(grid.grid_str(path=path, start=start, end=end))
+
 
     #    running = 34
     # if mapGenerated:
@@ -380,7 +409,10 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
     renderEnemies()
     pygame.draw.rect(screen, (0, 255, 0), player)
     renderInventory()
-    playerGridPosition = [(((screenWidth/2) - playerPosition[0])/ tileWidth)//1, ((screenHeight/2 - playerPosition[1])/ tileHeight)//1]
+    playerGridPosition = [int((((screenWidth/2) - playerPosition[0])/ tileWidth)//1), int(((screenHeight/2 - playerPosition[1])/ tileHeight)//1)]
+    if not inThread:
+        pathfindingThread = Thread(target=pathfinding)
+        pathfindingThread.start()
 
 def draw_rect_alpha(surface, color, rect): # sourced from https://stackoverflow.com/questions/6339057/draw-a-transparent-rectangles-and-polygons-in-pygame
     shape_surf = pygame.Surface(pygame.Rect(rect).size, pygame.SRCALPHA)
@@ -651,6 +683,8 @@ def isOnGround():
             else:
                 onGroundMap[x].append(0)
 
+givePaths = False
+
 while True:
     pygame.display.update()
 
@@ -684,6 +718,8 @@ while True:
                     print(playerInventory)
                 if event.key == pygame.K_e:
                     CollectItem = True
+                if event.key == pygame.K_p:
+                    givePaths = True
             if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
                 toggleFullscreen()
         if event.type == pygame.KEYUP:
