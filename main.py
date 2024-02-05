@@ -302,14 +302,14 @@ mapGenerated = False
 
 inThread = False
 def pathfinding():
-    global enemiesToMove, grid, spawnedEnemies, playerGridPosition, pathGrid, pathTicks, inThread
+    global enemiesToMove, grid, spawnedEnemies, playerGridPosition, pathGrid, pathTicks, inThread, onGroundMap
     inThread = True
     # print(playerGridPosition)
     if pathTicks == 0:
         enemiesToMove = []
         grid = Grid(matrix=onGroundMap)
         for x in range(20):
-            start = grid.node(spawnedEnemies[x][2][0], spawnedEnemies[x][2][1])
+            start = grid.node(int(spawnedEnemies[x][2][0]//1), int(spawnedEnemies[x][2][1]//1))
             end = grid.node(playerGridPosition[0], playerGridPosition[1])
             finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
             path, runs = finder.find_path(start, end, grid)
@@ -318,17 +318,19 @@ def pathfinding():
                 if 'x' in pathGrid[l]:
                     for i in reversed(range(len(pathGrid[l]))):
                         if pathGrid[l][i] == 'x':
-                            n = i
+                            n = playerGridPosition[0]
                     enemiesToMove.append([x, (l, n)])
         pathTicks = 100
     # print(enemiesToMove)
     if enemiesToMove != []:
         for x in range(len(enemiesToMove)):
             if spawnedEnemies[enemiesToMove[x][0]][2] != enemiesToMove[x][1]:
-                if spawnedEnemies[enemiesToMove[x][0]][2][1] > enemiesToMove[x][1][1]:
-                    spawnedEnemies[enemiesToMove[x][0]][2][1] -= 0.05
-                if spawnedEnemies[enemiesToMove[x][0]][2][1] < enemiesToMove[x][1][1]:
-                    spawnedEnemies[enemiesToMove[x][0]][2][1] += 0.05
+                if spawnedEnemies[enemiesToMove[x][0]][2][1]//1 > enemiesToMove[x][1][1]//1:
+                    spawnedEnemies[enemiesToMove[x][0]][2][0] -= 0.05
+                    print("doin stuff")
+                if spawnedEnemies[enemiesToMove[x][0]][2][1]//1 < enemiesToMove[x][1][1]//1:
+                    spawnedEnemies[enemiesToMove[x][0]][2][0] += 0.05
+        print("doin stuff")
     pathTicks -= 1
     inThread = False
 
@@ -524,7 +526,7 @@ jumping = False
 spawnedEnemies = []
 def spawnEnemies():
     for x in range(20):
-        location = (random.randint(0, 66), random.randint(0, 64))
+        location = [random.randint(0, 66), random.randint(0, 64)]
         print(location)
         print("map len " + str(len(map)) + " " + str(len(map[0])))
         isDone = False
@@ -532,12 +534,13 @@ def spawnEnemies():
             if location in onGround:
                 isDone = True
             else:
-                location = (random.randint(0, 66), random.randint(0, 64))
+                location = [random.randint(0, 66), random.randint(0, 64)]
         enemyType = random.randint(0, len(enemies)-1)
         spawnedEnemies.append([enemies[enemyType][0], enemies[enemyType][1], location])
 
 enemiesRendered = []
 def renderEnemies():
+    global spawnedEnemiesCopy, spawnedEnemies
     enemiesRendered = []
     if len(spawnedEnemies) > 0:
         for x in range (len(spawnedEnemies)):
@@ -545,6 +548,14 @@ def renderEnemies():
                                              ((tileHeight) * (spawnedEnemies[x][2][1])) + playerPosition[1] + tileHeight - (screenHeight/30) +1,
                                              screenWidth / 30, screenHeight / 30))
             pygame.draw.rect(screen, spawnedEnemies[x][1], enemiesRendered[-1])
+            try:
+                if spawnedEnemies == spawnedEnemiesCopy:
+                    pass
+                else:
+                    print("Difference!")
+                    spawnedEnemiesCopy = spawnedEnemies
+            except:
+                spawnedEnemiesCopy = spawnedEnemies
 
 itemSelected = 1
 
@@ -665,7 +676,7 @@ def isOnGround():
                 if map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL:
                     pass
                 else:
-                    onGround.append((x,y))
+                    onGround.append([x,y])
             else:
                 if map[x][y + 1] == FLOOR_COLOR:
                     pass
@@ -673,12 +684,12 @@ def isOnGround():
                     if map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL:
                         pass
                     else:
-                        onGround.append((x,y))
+                        onGround.append([x,y])
     onGroundMap = []
     for x in range(len(map)):
         onGroundMap.append([])
         for y in range(len(map)):
-            if (y,x) in onGround:
+            if [y,x] in onGround:
                 onGroundMap[x].append(1)
             else:
                 onGroundMap[x].append(0)
@@ -828,12 +839,12 @@ while True:
 # FIXME: Player moves up and down when at the bottom of the map. Just visual, causes no gameplay issues.
 # FIXME: Game crashes after making a game file and then trying to load that game file. For some reason loading the game file that was just created does not work.
 
-# Todo: Add sprites/assets
 # Todo: Add items
-# Todo: Add Enemies
+# Todo: Add enemy fighting
 # Todo: Continue pathfinding
 # Todo: Add health
 # Todo: Add death screen
+# Todo: Add difficulty settings
 
 # Considerations for V2:
 # Add random player spawning
@@ -841,3 +852,5 @@ while True:
 # Add doors
 # Add levels
 # Better pathfinding and enemy movement
+# Adjust sizing of assets
+# Add sprites/assets
