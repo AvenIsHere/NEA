@@ -10,6 +10,7 @@ from pathfinding.core.diagonal_movement import DiagonalMovement
 from pathfinding.core.grid import Grid
 from pathfinding.finder.a_star import AStarFinder
 from threading import Thread
+import multiprocessing
 
 pygame.init()
 
@@ -308,34 +309,32 @@ def pathfinding():
     if pathTicks == 0:
         enemiesToMove = []
         grid = Grid(matrix=onGroundMap)
-        for x in range(20):
+        for x in range(len(spawnedEnemies)):
             start = grid.node(int(spawnedEnemies[x][2][0]//1), int(spawnedEnemies[x][2][1]//1))
             end = grid.node(playerGridPosition[0], playerGridPosition[1])
             finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
             path, runs = finder.find_path(start, end, grid)
             pathGrid = grid.grid_str(path=path, start=start, end=end).split('\n')
             for l in range(len(pathGrid)):
-                if 'x' in pathGrid[l]:
+                if 'x' in pathGrid[l] or 'se' in pathGrid[l] or 'es' in pathGrid[l]:
                     for i in reversed(range(len(pathGrid[l]))):
-                        if pathGrid[l][i] == 'x':
+                        if pathGrid[l][i] == 'x' or (pathGrid[l][i] == 'e' and (pathGrid[l][i-1] == 's' or pathGrid[l][i+1] == 's')):
                             n = playerGridPosition[0]
-                    enemiesToMove.append([x, (l, n)])
-        pathTicks = 100
+                    enemiesToMove.append([x, (n, l)])
+        pathTicks = 50
     # print(enemiesToMove)
     if enemiesToMove != []:
         for x in range(len(enemiesToMove)):
             if spawnedEnemies[enemiesToMove[x][0]][2] != enemiesToMove[x][1]:
-                if spawnedEnemies[enemiesToMove[x][0]][2][1]//1 > enemiesToMove[x][1][1]//1:
+                if spawnedEnemies[enemiesToMove[x][0]][2][0]//1 > enemiesToMove[x][1][0]//1:
                     spawnedEnemies[enemiesToMove[x][0]][2][0] -= 0.05
-                    print("doin stuff")
-                if spawnedEnemies[enemiesToMove[x][0]][2][1]//1 < enemiesToMove[x][1][1]//1:
+                if spawnedEnemies[enemiesToMove[x][0]][2][0]//1 < enemiesToMove[x][1][0]//1:
                     spawnedEnemies[enemiesToMove[x][0]][2][0] += 0.05
-        print("doin stuff")
     pathTicks -= 1
     inThread = False
 
 def playGame(file): # Handles most of the gameplay TODO: Split into multiple functions
-    global playerPosition, playerGridPosition, fileLine, firstTimeRun, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread
+    global playerPosition, playerGridPosition, fileLine, firstTimeRun, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread, mouseNotUp
     if firstTimeRun == True:
         mapGenerated = False
         with open(f"gamesaves/{file}", "r") as f:
@@ -379,7 +378,6 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
                         map.pop()
         isOnGround()
         playerGridPosition = [int((((screenWidth/2) - playerPosition[0])/tileWidth)//1), int((((screenHeight/2) - playerPosition[1])/ tileHeight)//1)]
-        print('playerGridPosition: ', playerGridPosition)
         for x in range(20):
             spawnItem("powerup")
             spawnItem("weapon")
@@ -410,24 +408,44 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
     renderItem(spawnedItems, len(spawnedItems))
     renderEnemies()
     pygame.draw.rect(screen, (0, 255, 0), player)
+    playerHealth = 100
     renderInventory()
     playerGridPosition = [int((((screenWidth/2) - playerPosition[0])/ tileWidth)//1), int(((screenHeight/2 - playerPosition[1])/ tileHeight)//1)]
-    if not inThread:
+    try:
+        if not pathfindingThread.is_alive():
+            pathfindingThread = Thread(target=pathfinding)
+            pathfindingThread.start()
+    except:
         pathfindingThread = Thread(target=pathfinding)
         pathfindingThread.start()
+    if not inventoryBackground.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
+        0] and mouseNotUp == False and ((itemSelected == 1 and playerInventory[0] != []) or (itemSelected == 2 and playerInventory[1] != [])):
+        playerAttack(playerInventory[itemSelected-1][0])
+        mouseNotUp = True
+    print("spawned enemies ", len(spawnedEnemies))
 
 def draw_rect_alpha(surface, color, rect): # sourced from https://stackoverflow.com/questions/6339057/draw-a-transparent-rectangles-and-polygons-in-pygame
     shape_surf = pygame.Surface(pygame.Rect(rect).size, pygame.SRCALPHA)
     pygame.draw.rect(shape_surf, color, shape_surf.get_rect())
     surface.blit(shape_surf, rect)
 
-spawnedItems = []
+attackStrength = 10
+bulletsFired = []
+def playerAttack(weaponType):
+    if weaponType == 0:
+        bulletsFired.append(playerGridPosition)
+    elif weaponType == 1:
+        swordAttacking = True
+        for x in range(len(spawnedEnemies)):
+            if abs(enemiesRendered[x].x - player.x) < 100 and abs(enemiesRendered[x].y - player.y) < 40:
+                spawnedEnemies[x][3] -= attackStrength
+                if spawnedEnemies[x][3] == 0:
+                    spawnedEnemies.pop(x)
 
+spawnedItems = []
 def spawnItem(type):
     global spawnedItems
     location = (random.randint(0,66),random.randint(0,64))
-    print(location)
-    print("map len "+str(len(map))+" "+str(len(map[0])))
     isDone = False
     while isDone == False:
         if location[1] == 64:
@@ -488,8 +506,8 @@ def renderItem(spawnedItems, amount):
                     else:
                         print("inventory full")
                 if spawnedItems[x][1] == "powerup" and spawnedItems[x][0] == 0:
-                    if speed == 600:
-                        speed = 460
+                    if speed == 400:
+                        speed = 300
                         timeRemainingSpeedBoost = 1000
                         spawnedItems.pop(x)
                         break
@@ -527,8 +545,6 @@ spawnedEnemies = []
 def spawnEnemies():
     for x in range(20):
         location = [random.randint(0, 66), random.randint(0, 64)]
-        print(location)
-        print("map len " + str(len(map)) + " " + str(len(map[0])))
         isDone = False
         while isDone == False:
             if location in onGround:
@@ -536,11 +552,11 @@ def spawnEnemies():
             else:
                 location = [random.randint(0, 66), random.randint(0, 64)]
         enemyType = random.randint(0, len(enemies)-1)
-        spawnedEnemies.append([enemies[enemyType][0], enemies[enemyType][1], location])
+        spawnedEnemies.append([enemies[enemyType][0], enemies[enemyType][1], location, 100])
 
 enemiesRendered = []
 def renderEnemies():
-    global spawnedEnemiesCopy, spawnedEnemies
+    global spawnedEnemiesCopy, spawnedEnemies, enemiesRendered
     enemiesRendered = []
     if len(spawnedEnemies) > 0:
         for x in range (len(spawnedEnemies)):
@@ -548,21 +564,18 @@ def renderEnemies():
                                              ((tileHeight) * (spawnedEnemies[x][2][1])) + playerPosition[1] + tileHeight - (screenHeight/30) +1,
                                              screenWidth / 30, screenHeight / 30))
             pygame.draw.rect(screen, spawnedEnemies[x][1], enemiesRendered[-1])
-            try:
-                if spawnedEnemies == spawnedEnemiesCopy:
-                    pass
-                else:
-                    print("Difference!")
-                    spawnedEnemiesCopy = spawnedEnemies
-            except:
-                spawnedEnemiesCopy = spawnedEnemies
+            if abs(enemiesRendered[-1].x - player.x) < 100 and abs(enemiesRendered[-1].y - player.y) < 100:
+                enemyHealthText = font2.render(str(spawnedEnemies[x][3]), True, (30,30,30))
+                enemyHealthTextRect = enemyHealthText.get_rect(center=(enemiesRendered[-1].center[0],enemiesRendered[-1].center[1] - 20))
+                screen.blit(enemyHealthText, enemyHealthTextRect)
+
 
 itemSelected = 1
 
 
 
 def renderInventory():
-    global itemSelected, mouseNotUp, playerGridPosition
+    global itemSelected, mouseNotUp, playerGridPosition, inventoryBackground
     inventoryBackground = pygame.Rect(screenWidth/2 - 100, screenHeight - 100, 200, 80)
     selectedItem1Rect = pygame.Rect(screenWidth / 2 - 100, screenHeight - 100, 100, 80)
     selectedItem2Rect = pygame.Rect(screenWidth / 2, screenHeight - 100, 100, 80)
@@ -664,7 +677,7 @@ def saveFile(): # Saves the current file, used when exiting the game
 
 CollectItem = False
 
-speed = 600
+speed = 400
 timeRemainingSpeedBoost = 0
 
 def isOnGround():
@@ -694,7 +707,7 @@ def isOnGround():
             else:
                 onGroundMap[x].append(0)
 
-givePaths = False
+clock = pygame.time.Clock()
 
 while True:
     pygame.display.update()
@@ -725,12 +738,8 @@ while True:
 
                 if event.key == pygame.K_h:
                     playerPosition = [screenWidth, 0]
-                if event.key == pygame.K_i:
-                    print(playerInventory)
                 if event.key == pygame.K_e:
                     CollectItem = True
-                if event.key == pygame.K_p:
-                    givePaths = True
             if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
                 toggleFullscreen()
         if event.type == pygame.KEYUP:
@@ -822,7 +831,7 @@ while True:
 
             if timeRemainingSpeedBoost > 0:
                 if timeRemainingSpeedBoost == 1:
-                    speed = 600
+                    speed = 400
                 timeRemainingSpeedBoost -= 1
 
     if CollectItem:
@@ -834,6 +843,8 @@ while True:
         screen.blit(audioErrorText, audioErrorTextRect)
         if pygame.mouse.get_pressed()[0] and audioErrorTextRect.collidepoint(pygame.mouse.get_pos()):
             audioMessagePressed = True
+
+    clock.tick(60)
 
 # FIXME: Player sometimes goes one pixel into the wall. No clue what causes it, it appears to be random. Player cannot move in other axis until moving away from the wall.
 # FIXME: Player moves up and down when at the bottom of the map. Just visual, causes no gameplay issues.
