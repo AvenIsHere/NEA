@@ -101,17 +101,19 @@ PresetMaps = [
 ]
 
 powerups = [['Increased speed', (0,0,200)],
-            ['Damage x2', (0,0,200)]
+            ['Damage x2', (0,200,200)]
 
 ]
 
-weapons = [['Gun', (200,0,0)],
-           ['Sword', (200,0,0)]
+weapons = [['Gun', (0,200,0)],
+           ['Sword', (200,200,0)],
+           ['Wand', (100, 255, 255)]
 
 ]
 
-enemies = [['Zombie', (0,200,0)],
-           ['Wizard', (0,200,0)]
+enemies = [['Knight', (200,75,0)],
+           ['Wizard', (200,0,75)],
+           ['Soldier', (0,0,100)]
 
 ]
 
@@ -310,17 +312,41 @@ def pathfinding():
         enemiesToMove = []
         grid = Grid(matrix=onGroundMap)
         for x in range(len(spawnedEnemies)):
-            start = grid.node(int(spawnedEnemies[x][2][0]//1), int(spawnedEnemies[x][2][1]//1))
-            end = grid.node(playerGridPosition[0], playerGridPosition[1])
-            finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
-            path, runs = finder.find_path(start, end, grid)
-            pathGrid = grid.grid_str(path=path, start=start, end=end).split('\n')
-            for l in range(len(pathGrid)):
-                if 'x' in pathGrid[l] or 'se' in pathGrid[l] or 'es' in pathGrid[l]:
-                    for i in reversed(range(len(pathGrid[l]))):
-                        if pathGrid[l][i] == 'x' or (pathGrid[l][i] == 'e' and (pathGrid[l][i-1] == 's' or pathGrid[l][i+1] == 's')):
-                            n = playerGridPosition[0]
-                    enemiesToMove.append([x, (n, l)])
+            if abs(playerGridPosition[0] - int(spawnedEnemies[x][2][0]//1)) <= 21 and abs(playerGridPosition[1] - int(spawnedEnemies[x][2][1]//1)) <= 21:
+                start = grid.node(int(spawnedEnemies[x][2][0]//1), int(spawnedEnemies[x][2][1]//1))
+                end = grid.node(playerGridPosition[0], playerGridPosition[1])
+                finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
+                path, runs = finder.find_path(start, end, grid)
+                pathGrid = grid.grid_str(path=path, start=start, end=end).split('\n')
+                if spawnedEnemies[x][0] == 'Soldier' or spawnedEnemies[x][0] == 'Wizard':
+                    for l in range(len(pathGrid)):
+                        if 'se' in pathGrid[l] and not '#se' in pathGrid[l]:
+                            n = int(playerGridPosition[0]//1) - 2
+                            enemiesToMove.append([x, (n, l)])
+                        elif 'es' in pathGrid[l] and not 'es#' in pathGrid[l]:
+                            n = int(playerGridPosition[0]//1) + 2
+                            enemiesToMove.append([x, (n, l)])
+                        elif 'sxxe' in pathGrid[l] or 'exxs' in pathGrid[l]:
+                            pass
+                        elif 'x' in pathGrid[l]:
+                            for z in range(len(pathGrid[l])):
+                                if pathGrid[l][z] == 's':
+                                    sLocation = z
+                            for z in range(len(pathGrid[l])):
+                                if pathGrid[l][z] == 'e':
+                                    eLocation = z
+                            if sLocation < eLocation:
+                                n = int(playerGridPosition[0] // 1) - 1
+                            elif eLocation < sLocation:
+                                n = int(playerGridPosition[0] // 1) + 1
+                            enemiesToMove.append([x, (n, l)])
+                else:
+                    for l in range(len(pathGrid)):
+                        if 'x' in pathGrid[l] or 'se' in pathGrid[l] or 'es' in pathGrid[l]:
+                            for i in reversed(range(len(pathGrid[l]))):
+                                if pathGrid[l][i] == 'x' or (pathGrid[l][i] == 'e' and (pathGrid[l][i-1] == 's' or pathGrid[l][i+1] == 's')):
+                                    n = playerGridPosition[0]
+                            enemiesToMove.append([x, (n, l)])
         pathTicks = 50
     # print(enemiesToMove)
     if enemiesToMove != []:
@@ -333,18 +359,22 @@ def pathfinding():
     pathTicks -= 1
     inThread = False
 
+
 def playGame(file): # Handles most of the gameplay TODO: Split into multiple functions
-    global playerPosition, playerGridPosition, fileLine, firstTimeRun, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread, mouseNotUp
+    global playerPosition, playerGridPosition, fileLine, firstTimeRun, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread, mouseNotUp
     if firstTimeRun == True:
-        mapGenerated = False
         with open(f"gamesaves/{file}", "r") as f:
             fileLine = [line.strip() for line in f]
         firstTimeRun = False
         player = pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
                              screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
                              (screenHeight / 2) / 20)
+        enemiesDefeated = False
+        gameLost = False
         pathTicks = 0
         size = 10
+        spawnedEnemies = []
+        spawnedItems = []
         enemiesToMove = []
         if fileLine[1] == "firstplaythroughTrue":
             playerPosition = [90, -10]
@@ -356,32 +386,40 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
             cells[0, 0:80] = 1
             cells[0:60, 79] = 1
             cells[59, 0:80] = 1
-            mapGenerated = True
-            map = []
-            randomMaps = []
+            if not mapGenerated:
+                map = []
+                randomMaps = []
 
-            for y in range(5):
-                randomMaps.append([])
-                for x in range(5):
-                    randomMaps[y].append(random.randint(0, len(PresetMaps)-1))
+                for y in range(5):
+                    randomMaps.append([])
+                    for x in range(5):
+                        randomMaps[y].append(random.randint(0, len(PresetMaps)-1))
 
-            for LevelY in range(5):
-                for y in range(len(PresetMaps[0][0])):
-                    map.append([])
-                    for LevelX in range(5):
-                        for x in range(len(PresetMaps[0])):
-                            if PresetMaps[randomMaps[LevelY][LevelX]][x][y] == "-":
-                                map[LevelY * len(PresetMaps[0]) + y].append(WALL_COLOR)
-                            elif PresetMaps[randomMaps[LevelY][LevelX]][x][y] == " ":
-                                map[LevelY * len(PresetMaps[0]) + y].append(FLOOR_COLOR)
-                    if map[-1] == []:
-                        map.pop()
+                for LevelY in range(5):
+                    for y in range(len(PresetMaps[0][0])):
+                        map.append([])
+                        for LevelX in range(5):
+                            for x in range(len(PresetMaps[0])):
+                                if PresetMaps[randomMaps[LevelY][LevelX]][x][y] == "-":
+                                    map[LevelY * len(PresetMaps[0]) + y].append(WALL_COLOR)
+                                elif PresetMaps[randomMaps[LevelY][LevelX]][x][y] == " ":
+                                    map[LevelY * len(PresetMaps[0]) + y].append(FLOOR_COLOR)
+                        if map[-1] == []:
+                            map.pop()
+                mapGenerated = True
+            fileLine[1] = 'firstPlaythroughFalse'
         isOnGround()
         playerGridPosition = [int((((screenWidth/2) - playerPosition[0])/tileWidth)//1), int((((screenHeight/2) - playerPosition[1])/ tileHeight)//1)]
         for x in range(20):
             spawnItem("powerup")
             spawnItem("weapon")
         spawnEnemies()
+        timeSinceEnemyAttack = []
+        for x in range(len(spawnedEnemies)):
+            timeSinceEnemyAttack.append(0)
+            timeSinceWand.append(0)
+        playerHealth = 100
+        randomEnemyAttackTime = 50
 
 
     #    running = 34
@@ -408,39 +446,138 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
     renderItem(spawnedItems, len(spawnedItems))
     renderEnemies()
     pygame.draw.rect(screen, (0, 255, 0), player)
-    playerHealth = 100
     renderInventory()
     playerGridPosition = [int((((screenWidth/2) - playerPosition[0])/ tileWidth)//1), int(((screenHeight/2 - playerPosition[1])/ tileHeight)//1)]
-    try:
-        if not pathfindingThread.is_alive():
+    if not gameLost:
+        try:
+            if not pathfindingThread.is_alive():
+                pathfindingThread = Thread(target=pathfinding)
+                pathfindingThread.start()
+        except:
             pathfindingThread = Thread(target=pathfinding)
             pathfindingThread.start()
-    except:
-        pathfindingThread = Thread(target=pathfinding)
-        pathfindingThread.start()
-    if not inventoryBackground.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
-        0] and mouseNotUp == False and ((itemSelected == 1 and playerInventory[0] != []) or (itemSelected == 2 and playerInventory[1] != [])):
-        playerAttack(playerInventory[itemSelected-1][0])
-        mouseNotUp = True
-    print("spawned enemies ", len(spawnedEnemies))
+        if not inventoryBackground.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
+            0] and mouseNotUp == False and ((itemSelected == 1 and playerInventory[0] != []) or (itemSelected == 2 and playerInventory[1] != [])):
+            Attack(playerInventory[itemSelected - 1][0], player)
+            mouseNotUp = True
+        print("spawned enemies ", len(spawnedEnemies))
+        timeSinceSword += 1
+        for x in range(len(timeSinceWand)):
+            timeSinceWand[x] += 1
+        for x in range(len(spawnedEnemies)):
+            if abs(enemiesRendered[x].x - player.x) < 30 and abs(enemiesRendered[x].y - player.y) < 40 and timeSinceEnemyAttack[x] > randomEnemyAttackTime:
+                if spawnedEnemies[x][0] == 'Knight':
+                    timeSinceEnemyAttack[x] = 0
+                    playerHealth -= random.randint(2, 5)
+                    criticalHit = random.randint(0, 100)
+                    if criticalHit == 99:
+                        playerHealth -= 5
+                        print("Critical Hit!")
+            distance = pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
+            if distance.length() < 300 and timeSinceWand[x+1] > randomEnemyAttackTime:
+                if spawnedEnemies[x][0] == 'Wizard':
+                    timeSinceWand[x+1] = 0
+                    Attack(2, x)
+
+                randomEmemyAttackTime = random.randint(60, 85)
+        for x in range(len(timeSinceEnemyAttack)):
+            timeSinceEnemyAttack[x] += 1
+    if playerHealth < 0:
+        print("you died!")
+        gameLost = True
+    if gameLost:
+        lostGame()
+    print(playerHealth)
+    manageBullets()
+    if not spawnedEnemies:
+        enemiesDefeated = True
+
+
+def lostGame():
+    lostGameRect = pygame.Rect(0, 0, screenWidth, screenHeight)
+    draw_rect_alpha(screen, (50,50,50, 128), lostGameRect)
+    lostGameText = font.render("GAME OVER!", True, (255, 0, 0))
+    lostGameTextRect = lostGameText.get_rect(center=(screenWidth / 2, screenHeight / 6))
+    button('Respawn',(menuNameTextRect.centerx, menuNameTextRect.centery + 100),(150, 37.5), (100, 100, 100), respawn)
+    button('Menu', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100), toMenu)
+
+def respawn():
+    gameLost = False
+
+def toMenu():
+    global mapGenerated, inGame, loadMenu
+    menuEquals('main')
+    mapGenerated = False
+    inGame = False
+    loadMenu = True
 
 def draw_rect_alpha(surface, color, rect): # sourced from https://stackoverflow.com/questions/6339057/draw-a-transparent-rectangles-and-polygons-in-pygame
     shape_surf = pygame.Surface(pygame.Rect(rect).size, pygame.SRCALPHA)
     pygame.draw.rect(shape_surf, color, shape_surf.get_rect())
     surface.blit(shape_surf, rect)
 
-attackStrength = 10
+attackStrength = random.randint(6, 9)
+attackMultiplier = 1
 bulletsFired = []
-def playerAttack(weaponType):
+wandFired = []
+timeSinceSword = 30
+randomAttackTime = 30
+timeSinceWand = [0]
+randomWandAttackTime = 120
+def Attack(weaponType, origin):
+    global timeSinceSword, randomAttackTime, timeSinceWand, randomWandAttackTime
     if weaponType == 0:
-        bulletsFired.append(playerGridPosition)
+        if origin == player:
+            bulletsFired.append([playerGridPosition, pygame.Rect(player.x + (player.width/2), player.y + player.height - (player.height * (1/3)), player.width * (4/5), player.height * (1/3))])
+        else:
+            bulletsFired.append([playerGridPosition, pygame.Rect(origin.x + (origin.width / 2),origin.y + origin.height - (player.height * (1 / 3)),player.width * (4 / 5), player.height * (1 / 3))])
     elif weaponType == 1:
-        swordAttacking = True
         for x in range(len(spawnedEnemies)):
-            if abs(enemiesRendered[x].x - player.x) < 100 and abs(enemiesRendered[x].y - player.y) < 40:
-                spawnedEnemies[x][3] -= attackStrength
-                if spawnedEnemies[x][3] == 0:
+            if abs(enemiesRendered[x].x - player.x) < 30 and abs(enemiesRendered[x].y - player.y) < 40 and timeSinceSword > randomAttackTime:
+                spawnedEnemies[x][3] -= attackStrength * attackMultiplier
+                if spawnedEnemies[x][3] <= 0:
                     spawnedEnemies.pop(x)
+                timeSinceSword = 0
+                randomAttackTime = random.randint(25, 40)
+    elif weaponType == 2:
+        if origin == player:
+            if timeSinceWand[0] > randomWandAttackTime:
+                for x in range(len(spawnedEnemies)):
+                    if x == 0:
+                        shortestDistance = x, pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
+                    distanceToX = pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
+                    print(distanceToX)
+                    if distanceToX.length() < shortestDistance[1].length():
+                        shortestDistance = x, pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
+                if shortestDistance[1].length() < 300:
+                    wandFired.append([playerGridPosition, shortestDistance, pygame.Rect(player.x + (player.width/2), player.y - (player.height/2), player.width/4, player.width/4)])
+                    timeSinceWand[0] = 0
+                    randomWandAttackTime = random.randint(100, 140)
+        else:
+            if timeSinceWand[origin+1] > randomWandAttackTime:
+                distance = pygame.math.Vector2(abs(player.x - origin.x), abs(player.y - origin.y))
+                wandFired.append([])
+
+
+
+
+
+def win():
+    i
+def manageBullets():
+    if wandFired:
+        for x in range(len(wandFired)):
+            dx, dy = (spawnedEnemies[wandFired[x][1][0]][2][0] - (wandFired[x][0][0]), spawnedEnemies[wandFired[x][1][0]][2][1] - (wandFired[x][0][1]))
+            stepx, stepy = (dx / 25, dy / 25)
+            wandFired[x][0] = [wandFired[x][0][0] + stepx, wandFired[x][0][1] + stepy]
+            wandFired[x][2] = pygame.Rect(((tileWidth) * (wandFired[x][0][0])) + playerPosition[0] + 20,((tileHeight) * (wandFired[x][0][1])) + playerPosition[1] + 20, player.width/4, player.width/4)
+            pygame.draw.circle(screen, (100, 255, 255), wandFired[x][2].center, wandFired[x][2].width)
+            if wandFired[x][2].colliderect(enemiesRendered[wandFired[x][1][0]]):
+                if spawnedEnemies[wandFired[x][1][0]][3] <= 1:
+                    pass
+                else:
+                    spawnedEnemies[wandFired[x][1][0]][3] = int((spawnedEnemies[wandFired[x][1][0]][3] * (3/4))//1)
+                wandFired.pop(x)
 
 spawnedItems = []
 def spawnItem(type):
@@ -467,7 +604,7 @@ def spawnItem(type):
         spawnedItems.append([random.randint(0, len(weapons)-1), type, location])
 
 def renderItem(spawnedItems, amount):
-    global speed, timeRemainingSpeedBoost
+    global speed, timeRemainingSpeedBoost, attackMultiplier, timeRemainingAttackBoost
     itemsRendered = []
     width = screenWidth / 30
     height = screenHeight / 30
@@ -513,6 +650,14 @@ def renderItem(spawnedItems, amount):
                         break
                     else:
                         print("Speed Boost already applied.")
+                if spawnedItems[x][1] == "powerup" and spawnedItems[x][0] == 1:
+                    if attackMultiplier == 1:
+                        attackMultiplier = 2
+                        timeRemainingAttackBoost = 1000
+                        spawnedItems.pop(x)
+                        break
+                    else:
+                        print("Attack boost already applied.")
 
 
 def jump(): # Is called when the player jumps, calculates the player movement up and down when jumping, as well as stopping the jump when landing.
@@ -543,7 +688,7 @@ jumping = False
 
 spawnedEnemies = []
 def spawnEnemies():
-    for x in range(20):
+    for x in range(40):
         location = [random.randint(0, 66), random.randint(0, 64)]
         isDone = False
         while isDone == False:
@@ -568,6 +713,9 @@ def renderEnemies():
                 enemyHealthText = font2.render(str(spawnedEnemies[x][3]), True, (30,30,30))
                 enemyHealthTextRect = enemyHealthText.get_rect(center=(enemiesRendered[-1].center[0],enemiesRendered[-1].center[1] - 20))
                 screen.blit(enemyHealthText, enemyHealthTextRect)
+            enemyNameText = font2.render(spawnedEnemies[x][0][0], True, (30, 30, 30))
+            enemyNameTextRect = enemyNameText.get_rect(center=(enemiesRendered[-1].center[0], enemiesRendered[-1].center[1]))
+            screen.blit(enemyNameText, enemyNameTextRect)
 
 
 itemSelected = 1
@@ -603,9 +751,10 @@ def renderInventory():
             playerInventory[1] = []
             mouseNotUp = True
     if playerInventory[0] != []:
-        pygame.draw.rect(screen, (200,0,0), item1Inventory)
+        print(weapons[playerInventory[0][0]][0])
+        pygame.draw.rect(screen, weapons[playerInventory[0][0]][1], item1Inventory)
     if playerInventory[1] != []:
-        pygame.draw.rect(screen, (200, 0, 0), item2Inventory)
+        pygame.draw.rect(screen, weapons[playerInventory[1][0]][1], item2Inventory)
 
 def update(screen, cells, size, with_progress=False): # Procedural generation, unused.
     global map
@@ -642,8 +791,8 @@ def update(screen, cells, size, with_progress=False): # Procedural generation, u
 
 
 def saveFile(): # Saves the current file, used when exiting the game
+    global fileLine
     print(currentFile)
-    fileLine[1] = 'firstplaythroughFalse'
     fileLine[2] = str(playerPosition[0]) + " " + str(playerPosition[1])
     fileLine[3] = ""
     for y in range(len(map)):
@@ -679,6 +828,7 @@ CollectItem = False
 
 speed = 400
 timeRemainingSpeedBoost = 0
+timeRemainingAttackBoost = 0
 
 def isOnGround():
     global onGround, onGroundMap
@@ -829,10 +979,16 @@ while True:
             playerPosition[1] -= move.y
             fileLine[2] = playerPosition
 
-            if timeRemainingSpeedBoost > 0:
-                if timeRemainingSpeedBoost == 1:
-                    speed = 400
-                timeRemainingSpeedBoost -= 1
+        if timeRemainingSpeedBoost > 0:
+            if timeRemainingSpeedBoost == 1:
+                speed = 400
+            timeRemainingSpeedBoost -= 1
+        if timeRemainingAttackBoost > 0:
+            if timeRemainingAttackBoost == 1:
+                attackMultiplier = 1
+            timeRemainingAttackBoost -= 1
+
+
 
     if CollectItem:
         CollectItem = False
@@ -847,15 +1003,16 @@ while True:
     clock.tick(60)
 
 # FIXME: Player sometimes goes one pixel into the wall. No clue what causes it, it appears to be random. Player cannot move in other axis until moving away from the wall.
-# FIXME: Player moves up and down when at the bottom of the map. Just visual, causes no gameplay issues.
 # FIXME: Game crashes after making a game file and then trying to load that game file. For some reason loading the game file that was just created does not work.
+# FIXME: things can spawn in areas inaccessible to the player. this could just be an item or powerup that then cant be used, but it could also be an enemy, in which case the game cannot be won.
+# FIXME: soldiers and wizards go 1 too far left and 2 too far right, which can cause many issues.
 
-# Todo: Add items
 # Todo: Add enemy fighting
-# Todo: Continue pathfinding
-# Todo: Add health
+# Todo: Add player health
 # Todo: Add death screen
 # Todo: Add difficulty settings
+# Todo: Save enemies, inventory, powerups, items, and health. (Is this needed?)
+# Todo: Optimise pathfinding (V2?)
 
 # Considerations for V2:
 # Add random player spawning
@@ -865,3 +1022,5 @@ while True:
 # Better pathfinding and enemy movement
 # Adjust sizing of assets
 # Add sprites/assets
+# Add more items
+# Enemy idle movement
