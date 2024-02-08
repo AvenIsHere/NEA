@@ -476,8 +476,8 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
             distance = pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
             if distance.length() < 300 and timeSinceWand[x+1] > randomEnemyAttackTime:
                 if spawnedEnemies[x][0] == 'Wizard':
-                    timeSinceWand[x+1] = 0
                     Attack(2, x)
+                    timeSinceWand[x + 1] = 0
 
                 randomEmemyAttackTime = random.randint(60, 85)
         for x in range(len(timeSinceEnemyAttack)):
@@ -555,8 +555,10 @@ def Attack(weaponType, origin):
                     randomWandAttackTime = random.randint(100, 140)
         else:
             if timeSinceWand[origin+1] > randomWandAttackTime:
-                distance = pygame.math.Vector2(abs(player.x - origin.x), abs(player.y - origin.y))
-                wandFired.append([])
+                print("We are getting this far")
+                distance = player, pygame.math.Vector2(abs(player.x - enemiesRendered[origin].x), abs(player.y - enemiesRendered[origin].y))
+                wandFired.append([spawnedEnemies[origin][2], distance, pygame.Rect(enemiesRendered[origin].x + (player.width/2), enemiesRendered[origin].y - (player.height/2), player.width/4, player.width/4)])
+                timeSinceWand[origin+1] = 0
 
 
 
@@ -565,19 +567,33 @@ def Attack(weaponType, origin):
 def win():
     i
 def manageBullets():
+    global playerHealth
     if wandFired:
         for x in range(len(wandFired)):
-            dx, dy = (spawnedEnemies[wandFired[x][1][0]][2][0] - (wandFired[x][0][0]), spawnedEnemies[wandFired[x][1][0]][2][1] - (wandFired[x][0][1]))
-            stepx, stepy = (dx / 25, dy / 25)
-            wandFired[x][0] = [wandFired[x][0][0] + stepx, wandFired[x][0][1] + stepy]
-            wandFired[x][2] = pygame.Rect(((tileWidth) * (wandFired[x][0][0])) + playerPosition[0] + 20,((tileHeight) * (wandFired[x][0][1])) + playerPosition[1] + 20, player.width/4, player.width/4)
-            pygame.draw.circle(screen, (100, 255, 255), wandFired[x][2].center, wandFired[x][2].width)
-            if wandFired[x][2].colliderect(enemiesRendered[wandFired[x][1][0]]):
-                if spawnedEnemies[wandFired[x][1][0]][3] <= 1:
-                    pass
-                else:
-                    spawnedEnemies[wandFired[x][1][0]][3] = int((spawnedEnemies[wandFired[x][1][0]][3] * (3/4))//1)
-                wandFired.pop(x)
+            if wandFired[x][1][0] == player:
+                dx, dy = (playerPosition[0] - (wandFired[x][0][0]),playerPosition[1] - (wandFired[x][0][1]))
+                stepx, stepy = (dx / 25, dy / 25)
+                wandFired[x][0] = [wandFired[x][0][0] + stepx, wandFired[x][0][1] + stepy]
+                wandFired[x][2] = pygame.Rect(((tileWidth) * (wandFired[x][0][0])) + playerPosition[0] + 20, ((tileHeight) * (wandFired[x][0][1])) + playerPosition[1] + 20, player.width / 4, player.width / 4)
+                pygame.draw.circle(screen, (100, 255, 255), wandFired[x][2].center, wandFired[x][2].width)
+                if wandFired[x][2].colliderect(player):
+                    if playerHealth <= 1:
+                        pass
+                    else:
+                        playerHealth = int((playerHealth * (3/4))//1)
+                    wandFired.pop(x)
+            else:
+                dx, dy = (spawnedEnemies[wandFired[x][1][0]][2][0] - (wandFired[x][0][0]), spawnedEnemies[wandFired[x][1][0]][2][1] - (wandFired[x][0][1]))
+                stepx, stepy = (dx / 25, dy / 25)
+                wandFired[x][0] = [wandFired[x][0][0] + stepx, wandFired[x][0][1] + stepy]
+                wandFired[x][2] = pygame.Rect(((tileWidth) * (wandFired[x][0][0])) + playerPosition[0] + 20,((tileHeight) * (wandFired[x][0][1])) + playerPosition[1] + 20, player.width/4, player.width/4)
+                pygame.draw.circle(screen, (100, 255, 255), wandFired[x][2].center, wandFired[x][2].width)
+                if wandFired[x][2].colliderect(enemiesRendered[wandFired[x][1][0]]):
+                    if spawnedEnemies[wandFired[x][1][0]][3] <= 1:
+                        pass
+                    else:
+                        spawnedEnemies[wandFired[x][1][0]][3] = int((spawnedEnemies[wandFired[x][1][0]][3] * (3/4))//1)
+                    wandFired.pop(x)
 
 spawnedItems = []
 def spawnItem(type):
