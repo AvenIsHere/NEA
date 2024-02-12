@@ -1,3 +1,4 @@
+# importing different libraries
 import sys
 import pygame
 from pygame.locals import QUIT
@@ -13,6 +14,7 @@ import math
 
 pygame.init()
 
+# defining different variables
 screen = pygame.display.set_mode((1152, 648))
 pygame.display.set_caption('NEA')
 font = pygame.font.Font(None, 32)
@@ -22,7 +24,7 @@ isFullscreen = False
 displayAudioError = False
 audioMessagePressed = False
 try:
-    pygame.mixer.init()
+    pygame.mixer.init() # initialising audio
 except:
     displayAudioError = True
     audioMessagePressed = False
@@ -41,7 +43,7 @@ screenWidth = screen.get_width()
 screenHeight = screen.get_height()
 tileWidth = screenWidth/20
 tileHeight = screenHeight/20
-PresetMaps = [
+PresetMaps = [ # the maps used in the game. "-" is the floors/walls (where the player cant pass through), and " " is empty space, where the player can pass through.
     ['-----------   -',
      '              -',
      '   --         -',
@@ -121,20 +123,35 @@ playerInventory = [[],[]]
 
 inGame = False
 
-def button(text, position, size, colour, action=None, *args): # draws a button on screen with optional function
+def button(text, position, size, colour, action=None, *args):
+    # draws a button on screen with optional function
+    # input:
+    #   text - string, determines what text will appear on the button
+    #   position - tuple/array, determines where the button will be placed on the screen
+    #   size - tuple/array, determines the size of the button
+    #   colour - tuple, determines the colour of the button
+    #   action (optional) - function name, determines which function (if any) is called when the button is clicked
+    #   *args (optional) - any, arguments that are passed through to the function called when the button is pressed
+    # output:
+    #   This function displays a button on screen. It shows text on the button, and may also do something when clicked.
     global mouseNotUp
-    button_rect = pygame.Rect(position[0] - (size[0] / 2), position[1] - (size[1] / 2), size[0], size[1])
-    pygame.draw.rect(screen, colour, button_rect)
-    text = font.render(text, True, (0, 0, 0))
-    textRect = text.get_rect(center=button_rect.center)
-    screen.blit(text, textRect)
-    if button_rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
-        0] and mouseNotUp == False and action != None:
-        action(*args)
+    button_rect = pygame.Rect(position[0] - (size[0] / 2), position[1] - (size[1] / 2), size[0], size[1]) # creates a pygame Rect for the button
+    pygame.draw.rect(screen, colour, button_rect)  # draws that rect onto the screen
+    text = font.render(text, True, (0, 0, 0)) # creates the text to write on the screen
+    textRect = text.get_rect(center=button_rect.center) # creates a pygame rect for the text on the screen in the middle of the button
+    screen.blit(text, textRect) # draws the text on the screen
+    if button_rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0] and mouseNotUp == False and action != None: # determines whether or not the button has been pressed
+        action(*args) # does the action associated with pressing the button
         mouseNotUp = True
 
 
-def menuEquals(menu_set): # changes the menu to menu_set
+def menuEquals(menu_set):
+    # Changes current menu to the menu in the input menu_set.
+    # This function exists due to the way the button function works. Buttons can only call a function, so a function must be made to change a variable.
+    # input:
+    #   menu_set - string, determines which menu will be displayed.
+    # output:
+    #   menu - string, used in the menu function to display the correct menu
     global menu
     global difficulty
     global typedText
@@ -153,7 +170,9 @@ def menuEquals(menu_set): # changes the menu to menu_set
     ButtonsListOffset = 0
 
 
-def changeVolume(): # changes the volume
+def changeVolume():
+    # changes the volume, this function is called when the volume button is pressed.
+    # like the function above, this also exists due to the way the button function works.
     global volume
     volume += 10
     if volume > 100:
@@ -161,24 +180,18 @@ def changeVolume(): # changes the volume
     pygame.mixer.music.set_volume(volume / 100)
 
 
-def toggleFullscreen(): # toggles fullscreen, currently unused.
-    global isFullscreen
-    global player
-    if not isFullscreen:
-        pygame.display.set_mode((pygame.display.list_modes()[0][0], pygame.display.list_modes()[0][1]))
-        pygame.display.toggle_fullscreen()
-        isFullscreen = True
-    else:
-        pygame.display.toggle_fullscreen()
-        pygame.display.set_mode((1152, 648), pygame.RESIZABLE)
-        isFullscreen = False
-    if inGame and 'player' in globals():
-        player = pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
-                             screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
-                             (screenHeight / 2) / 20)
-
-
-def drawTextBox(text, position, size, colour, borderColour, borderSize, typedText): # draws a text box
+def drawTextBox(text, position, size, colour, borderColour, borderSize, typedText):
+    # draws a text box that the user can type into. This is used in the file creation screen so that the user can type the name of the file.
+    # Input:
+    #   text - string, the default text to be displayed when nothing has been typed
+    #   position - tuple, determines the position of the text box
+    #   size - tuple/array, was planned to determine the size of the text box, currently unused.
+    #   colour - tuple, determines the colour of the text box
+    #   borderColour - tuple, determines the colour of the border
+    #   borderSize - tuple/array, determines the size of the border
+    #   typedText - string, the text that has been typed and will be displayed in the text box, if any.
+    # Output:
+    #   displays a text box on the screen
     if typedText == '':
         text = font.render(text, True, (0, 0, 0))
         textRect = text.get_rect(center=position)
@@ -192,7 +205,10 @@ def drawTextBox(text, position, size, colour, borderColour, borderSize, typedTex
     screen.blit(text, textRect)
 
 
-def setDifficulty(): # changes the difficulty in the create file menu
+def setDifficulty():
+    # changes the difficulty in the create file menu
+    # Exists due to how the button function works
+    # When the difficulty button is pressed in the create file menu, this function changes the difficulty of the file
     global difficulty
     difficulties = {
         'Easy': 'Medium',
@@ -203,7 +219,13 @@ def setDifficulty(): # changes the difficulty in the create file menu
     difficulty = difficulties.get(difficulty, 'Easy')
 
 
-def createFile(): # creates a game file
+def createFile():
+    # creates a game file
+    # Input:
+    #   difficulty - string, determines the difficulty of the game save
+    #   typedText - string, determines the name of the game file
+    # Output:
+    #   Creates a game file with the name provided
     global fileName
     global difficulty
     global gameSaves
@@ -212,11 +234,16 @@ def createFile(): # creates a game file
     file.write(f'firstplaythroughTrue\n')
     for x in range(2):
         file.write(f'None\n')
-    global gameSaves
     gameSaves = os.listdir('gamesaves')
 
 
-def loadFile(file): # loads the chosen game file
+def loadFile(file):
+    # loads the chosen game file. This function closes the main menu and starts the game
+    # Input:
+    #   file - string, determines which file is loaded
+    # Output:
+    #   Outputs 
+
     global inGame, loadMenu, currentFile, firstTimeRun, map, playerPosition, fileLine
     print(f'load {file}')
     inGame = True
@@ -616,14 +643,20 @@ def manageBullets():
                         else:
                             spawnedEnemies[y][3] -= 15
                         bulletsFired.pop(x)
-                        break
                         breakForLoop = True
-                    if breakForLoop:
                         break
+                if breakForLoop:
+                    break
+                    breakForLoop = False
                 for y, tileRectRow in enumerate(tileRect):
                     for z, tileRectRowColumn in enumerate(tileRectRow):
                         if bulletSurfaceRect.colliderect(tileRect[y][z]) and (map[y][z] == GRID_COLOR or map[y][z] == WALL_COLOR or map[y][z] == FLOOR_NEXT_COL):
                             bulletsFired.pop(x)
+                            breakForLoop = True
+                            break
+                    if breakForLoop:
+                        break
+
 
 
 spawnedItems = []
@@ -682,11 +715,11 @@ def renderItem(spawnedItems, amount):
                     if playerInventory[0] == []:
                         playerInventory[0] = spawnedItems[x]
                         spawnedItems.pop(x)
-                        #break
+                        break
                     elif playerInventory[1] == []:
                         playerInventory[1] = spawnedItems[x]
                         spawnedItems.pop(x)
-                        #break
+                        break
                     else:
                         print("inventory full")
                 if spawnedItems[x][1] == "powerup" and spawnedItems[x][0] == 0:
@@ -694,7 +727,7 @@ def renderItem(spawnedItems, amount):
                         speed = 300
                         timeRemainingSpeedBoost = 1000
                         spawnedItems.pop(x)
-                        #break
+                        break
                     else:
                         print("Speed Boost already applied.")
                 if spawnedItems[x][1] == "powerup" and spawnedItems[x][0] == 1:
@@ -702,7 +735,7 @@ def renderItem(spawnedItems, amount):
                         attackMultiplier = 2
                         timeRemainingAttackBoost = 1000
                         spawnedItems.pop(x)
-                        #break
+                        break
                     else:
                         print("Attack boost already applied.")
                 if spawnedItems[x][1] == "powerup" and spawnedItems[x][0] == 2:
@@ -714,7 +747,7 @@ def renderItem(spawnedItems, amount):
                         else:
                             playerHealth = 100
                         spawnedItems.pop(x)
-                        #break
+                        break
 
 
 
@@ -775,11 +808,7 @@ def renderEnemies():
             enemyNameTextRect = enemyNameText.get_rect(center=(enemiesRendered[-1].center[0], enemiesRendered[-1].center[1]))
             screen.blit(enemyNameText, enemyNameTextRect)
 
-
 itemSelected = 1
-
-
-
 def renderInventory():
     global itemSelected, mouseNotUp, playerGridPosition, inventoryBackground
     inventoryBackground = pygame.Rect(screenWidth/2 - 100, screenHeight - 100, 200, 80)
