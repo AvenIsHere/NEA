@@ -601,10 +601,6 @@ def manageBullets():
                 wandFired[x][0] = [wandFired[x][0][0] + stepx, wandFired[x][0][1] + stepy]
                 wandFired[x][2] = pygame.Rect(((tileWidth) * (wandFired[x][0][0])) + playerPosition[0] + 20, ((tileHeight) * (wandFired[x][0][1])) + playerPosition[1] + 20, player.width / 4, player.width / 4)
                 pygame.draw.circle(screen, (100, 255, 255), wandFired[x][2].center, wandFired[x][2].width)
-                wandFired[x][3] += 1
-                if wandFired[x][3] >= 200:
-                    wandFired.pop(x)
-                    break
                 if wandFired[x][2].colliderect(player):
                     if playerHealth <= 1:
                         pass
@@ -635,7 +631,8 @@ def manageBullets():
                 bulletSurfaceRect = bulletSurface.get_rect()
                 bulletSurfaceRect.center = bulletRect.center
                 pygame.draw.rect(screen, (255,164,0), bulletSurfaceRect)
-                bulletsFired[x][0][0] += 0.2 * math.sin(bulletsFired[x][2])
+                bulletsFired[x][0][0] += 0.2 * math.sin(bulletsFired[x][2]+(math.pi/2))
+                bulletsFired[x][0][1] -= 0.2 * math.cos(bulletsFired[x][2]+(math.pi/2))
                 for y in range(len(enemiesRendered)):
                     if bulletSurfaceRect.colliderect(enemiesRendered[y]):
                         if spawnedEnemies[y][3] <= 15:
@@ -646,8 +643,8 @@ def manageBullets():
                         breakForLoop = True
                         break
                 if breakForLoop:
-                    break
                     breakForLoop = False
+                    continue
                 for y, tileRectRow in enumerate(tileRect):
                     for z, tileRectRowColumn in enumerate(tileRectRow):
                         if bulletSurfaceRect.colliderect(tileRect[y][z]) and (map[y][z] == GRID_COLOR or map[y][z] == WALL_COLOR or map[y][z] == FLOOR_NEXT_COL):
@@ -656,6 +653,22 @@ def manageBullets():
                             break
                     if breakForLoop:
                         break
+                if breakForLoop:
+                    breakForLoop = False
+                    continue
+                if bulletsFired[x][0][0] <= 0:
+                    bulletsFired.pop(x)
+                    continue
+                if bulletsFired[x][0][0] >= 66:
+                    bulletsFired.pop(x)
+                    continue
+                if bulletsFired[x][0][1] <= 0:
+                    bulletsFired.pop(x)
+                    continue
+                if bulletsFired[x][0][1] >= 67:
+                    bulletsFired.pop(x)
+                    continue
+
 
 
 
