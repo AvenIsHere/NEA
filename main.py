@@ -2,7 +2,6 @@ import sys
 import pygame
 from pygame.locals import QUIT
 import numpy as np
-import time
 import os
 import random
 import pathfinding
@@ -10,7 +9,7 @@ from pathfinding.core.diagonal_movement import DiagonalMovement
 from pathfinding.core.grid import Grid
 from pathfinding.finder.a_star import AStarFinder
 from threading import Thread
-import multiprocessing
+import math
 
 pygame.init()
 
@@ -101,7 +100,8 @@ PresetMaps = [
 ]
 
 powerups = [['Increased speed', (0,0,200)],
-            ['Damage x2', (0,200,200)]
+            ['Damage x2', (0,200,200)],
+            ['+20 health', (200, 25, 25)]
 
 ]
 
@@ -214,8 +214,6 @@ def createFile(): # creates a game file
         file.write(f'None\n')
     global gameSaves
     gameSaves = os.listdir('gamesaves')
-    print(gameSaves)
-    loadFile(f'{typedText}.txt')
 
 
 def loadFile(file): # loads the chosen game file
@@ -460,7 +458,6 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
             0] and mouseNotUp == False and ((itemSelected == 1 and playerInventory[0] != []) or (itemSelected == 2 and playerInventory[1] != [])):
             Attack(playerInventory[itemSelected - 1][0], player)
             mouseNotUp = True
-        print("spawned enemies ", len(spawnedEnemies))
         timeSinceSword += 1
         for x in range(len(timeSinceWand)):
             timeSinceWand[x] += 1
@@ -474,12 +471,11 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
                         playerHealth -= 5
                         print("Critical Hit!")
             distance = pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
-            if distance.length() < 300 and timeSinceWand[x+1] > randomEnemyAttackTime:
+            if distance.length() < 300:
+                print(timeSinceWand[x+1], " ", randomWandAttackTime, spawnedEnemies[x][0])
                 if spawnedEnemies[x][0] == 'Wizard':
                     Attack(2, x)
-                    timeSinceWand[x + 1] = 0
-
-                randomEmemyAttackTime = random.randint(60, 85)
+                randomEnemyAttackTime = random.randint(60, 85)
         for x in range(len(timeSinceEnemyAttack)):
             timeSinceEnemyAttack[x] += 1
     if playerHealth < 0:
@@ -487,17 +483,22 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
         gameLost = True
     if gameLost:
         lostGame()
-    print(playerHealth)
     manageBullets()
     if not spawnedEnemies:
         enemiesDefeated = True
-
+    if playerHealth > 0:
+        playerHealthRect = pygame.Rect(20, 20, 200*(playerHealth/100), 20)
+        pygame.draw.rect(screen, (200, 25, 25), playerHealthRect)
+        playerHealthText = font2.render(str(playerHealth), True, (0,0,0))
+        playerHealthTextRect = playerHealthText.get_rect(left=20, top=playerHealthRect.bottom + 5)
+        screen.blit(playerHealthText, playerHealthTextRect)
 
 def lostGame():
     lostGameRect = pygame.Rect(0, 0, screenWidth, screenHeight)
     draw_rect_alpha(screen, (50,50,50, 128), lostGameRect)
     lostGameText = font.render("GAME OVER!", True, (255, 0, 0))
     lostGameTextRect = lostGameText.get_rect(center=(screenWidth / 2, screenHeight / 6))
+    screen.blit(lostGameText, lostGameTextRect)
     button('Respawn',(menuNameTextRect.centerx, menuNameTextRect.centery + 100),(150, 37.5), (100, 100, 100), respawn)
     button('Menu', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100), toMenu)
 
@@ -528,9 +529,9 @@ def Attack(weaponType, origin):
     global timeSinceSword, randomAttackTime, timeSinceWand, randomWandAttackTime
     if weaponType == 0:
         if origin == player:
-            bulletsFired.append([playerGridPosition, pygame.Rect(player.x + (player.width/2), player.y + player.height - (player.height * (1/3)), player.width * (4/5), player.height * (1/3))])
+            bulletsFired.append([playerGridPosition, pygame.Rect(player.x + (player.width/2), player.y + player.height - (player.height * (1/3)), player.width * (4/5), player.height * (1/3)), math.atan2((pygame.mouse.get_pos()[1] - player.y), (pygame.mouse.get_pos()[0] - player.x)), origin])
         else:
-            bulletsFired.append([playerGridPosition, pygame.Rect(origin.x + (origin.width / 2),origin.y + origin.height - (player.height * (1 / 3)),player.width * (4 / 5), player.height * (1 / 3))])
+            bulletsFired.append([spawnedEnemies[origin][2], pygame.Rect(origin.x + (origin.width / 2),origin.y + origin.height - (player.height * (1 / 3)),player.width * (4 / 5), player.height * (1 / 3)), ])
     elif weaponType == 1:
         for x in range(len(spawnedEnemies)):
             if abs(enemiesRendered[x].x - player.x) < 30 and abs(enemiesRendered[x].y - player.y) < 40 and timeSinceSword > randomAttackTime:
@@ -546,41 +547,42 @@ def Attack(weaponType, origin):
                     if x == 0:
                         shortestDistance = x, pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
                     distanceToX = pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
-                    print(distanceToX)
                     if distanceToX.length() < shortestDistance[1].length():
                         shortestDistance = x, pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
                 if shortestDistance[1].length() < 300:
                     wandFired.append([playerGridPosition, shortestDistance, pygame.Rect(player.x + (player.width/2), player.y - (player.height/2), player.width/4, player.width/4)])
                     timeSinceWand[0] = 0
-                    randomWandAttackTime = random.randint(100, 140)
+                    randomWandAttackTime = random.randint(300, 500)
         else:
             if timeSinceWand[origin+1] > randomWandAttackTime:
-                print("We are getting this far")
                 distance = player, pygame.math.Vector2(abs(player.x - enemiesRendered[origin].x), abs(player.y - enemiesRendered[origin].y))
-                wandFired.append([spawnedEnemies[origin][2], distance, pygame.Rect(enemiesRendered[origin].x + (player.width/2), enemiesRendered[origin].y - (player.height/2), player.width/4, player.width/4)])
+                wandFired.append([spawnedEnemies[origin][2], distance, pygame.Rect(enemiesRendered[origin].x + (player.width/2), enemiesRendered[origin].y - (player.height/2), player.width/4, player.width/4), 0])
                 timeSinceWand[origin+1] = 0
-
-
-
-
 
 def win():
     i
+
+
 def manageBullets():
     global playerHealth
+    breakForLoop = False
     if wandFired:
-        for x in range(len(wandFired)):
+        for x in range(len(wandFired) -1, 0, -1):
             if wandFired[x][1][0] == player:
-                dx, dy = (playerPosition[0] - (wandFired[x][0][0]),playerPosition[1] - (wandFired[x][0][1]))
+                dx, dy = (playerGridPosition[0] - (wandFired[x][0][0]),playerGridPosition[1] - (wandFired[x][0][1]))
                 stepx, stepy = (dx / 25, dy / 25)
                 wandFired[x][0] = [wandFired[x][0][0] + stepx, wandFired[x][0][1] + stepy]
                 wandFired[x][2] = pygame.Rect(((tileWidth) * (wandFired[x][0][0])) + playerPosition[0] + 20, ((tileHeight) * (wandFired[x][0][1])) + playerPosition[1] + 20, player.width / 4, player.width / 4)
                 pygame.draw.circle(screen, (100, 255, 255), wandFired[x][2].center, wandFired[x][2].width)
+                wandFired[x][3] += 1
+                if wandFired[x][3] >= 200:
+                    wandFired.pop(x)
+                    break
                 if wandFired[x][2].colliderect(player):
                     if playerHealth <= 1:
                         pass
                     else:
-                        playerHealth = int((playerHealth * (3/4))//1)
+                        playerHealth = int((playerHealth * (5/6))//1)
                     wandFired.pop(x)
             else:
                 dx, dy = (spawnedEnemies[wandFired[x][1][0]][2][0] - (wandFired[x][0][0]), spawnedEnemies[wandFired[x][1][0]][2][1] - (wandFired[x][0][1]))
@@ -588,12 +590,41 @@ def manageBullets():
                 wandFired[x][0] = [wandFired[x][0][0] + stepx, wandFired[x][0][1] + stepy]
                 wandFired[x][2] = pygame.Rect(((tileWidth) * (wandFired[x][0][0])) + playerPosition[0] + 20,((tileHeight) * (wandFired[x][0][1])) + playerPosition[1] + 20, player.width/4, player.width/4)
                 pygame.draw.circle(screen, (100, 255, 255), wandFired[x][2].center, wandFired[x][2].width)
+                wandFired[x][3] += 1
+                if wandFired[x][3] >= 600:
+                    wandFired.pop(x)
                 if wandFired[x][2].colliderect(enemiesRendered[wandFired[x][1][0]]):
                     if spawnedEnemies[wandFired[x][1][0]][3] <= 1:
-                        pass
+                        spawnedEnemies.pop(wandFired[x][1][0])
                     else:
                         spawnedEnemies[wandFired[x][1][0]][3] = int((spawnedEnemies[wandFired[x][1][0]][3] * (3/4))//1)
                     wandFired.pop(x)
+    if bulletsFired:
+        for x in range(len(bulletsFired)-1, 0, -1):
+            if bulletsFired[x][3] == player:
+                bulletRect = pygame.Rect(((tileWidth) * (bulletsFired[x][0][0])) + playerPosition[0] + 20, ((tileHeight) * (bulletsFired[x][0][1])) + playerPosition[1] + 20, bulletsFired[x][1].width, bulletsFired[x][1].height)
+                bulletSurface = pygame.Surface((bulletRect.width, bulletRect.height))
+                bulletSurface = pygame.transform.rotate(bulletSurface, math.degrees(bulletsFired[x][2]))
+                bulletSurfaceRect = bulletSurface.get_rect()
+                bulletSurfaceRect.center = bulletRect.center
+                pygame.draw.rect(screen, (255,164,0), bulletSurfaceRect)
+                bulletsFired[x][0][0] += 0.2 * math.sin(bulletsFired[x][2])
+                for y in range(len(enemiesRendered)):
+                    if bulletSurfaceRect.colliderect(enemiesRendered[y]):
+                        if spawnedEnemies[y][3] <= 15:
+                            spawnedEnemies.pop(y)
+                        else:
+                            spawnedEnemies[y][3] -= 15
+                        bulletsFired.pop(x)
+                        break
+                        breakForLoop = True
+                    if breakForLoop:
+                        break
+                for y, tileRectRow in enumerate(tileRect):
+                    for z, tileRectRowColumn in enumerate(tileRectRow):
+                        if bulletSurfaceRect.colliderect(tileRect[y][z]) and (map[y][z] == GRID_COLOR or map[y][z] == WALL_COLOR or map[y][z] == FLOOR_NEXT_COL):
+                            bulletsFired.pop(x)
+
 
 spawnedItems = []
 def spawnItem(type):
@@ -620,11 +651,11 @@ def spawnItem(type):
         spawnedItems.append([random.randint(0, len(weapons)-1), type, location])
 
 def renderItem(spawnedItems, amount):
-    global speed, timeRemainingSpeedBoost, attackMultiplier, timeRemainingAttackBoost
+    global speed, timeRemainingSpeedBoost, attackMultiplier, timeRemainingAttackBoost, playerHealth
     itemsRendered = []
     width = screenWidth / 30
     height = screenHeight / 30
-    for x in range(amount):
+    for x in range(amount-1, 0, -1):
         itemsRendered.append(pygame.Rect(((tileWidth) * (spawnedItems[x][2][0])) + playerPosition[0],((tileHeight) * (spawnedItems[x][2][1])) + playerPosition[1] + tileHeight - height +1,width,height))
         if spawnedItems[x][1] == "powerup":
             pygame.draw.rect(screen,powerups[spawnedItems[x][0]][1],itemsRendered[-1])
@@ -651,11 +682,11 @@ def renderItem(spawnedItems, amount):
                     if playerInventory[0] == []:
                         playerInventory[0] = spawnedItems[x]
                         spawnedItems.pop(x)
-                        break
+                        #break
                     elif playerInventory[1] == []:
                         playerInventory[1] = spawnedItems[x]
                         spawnedItems.pop(x)
-                        break
+                        #break
                     else:
                         print("inventory full")
                 if spawnedItems[x][1] == "powerup" and spawnedItems[x][0] == 0:
@@ -663,7 +694,7 @@ def renderItem(spawnedItems, amount):
                         speed = 300
                         timeRemainingSpeedBoost = 1000
                         spawnedItems.pop(x)
-                        break
+                        #break
                     else:
                         print("Speed Boost already applied.")
                 if spawnedItems[x][1] == "powerup" and spawnedItems[x][0] == 1:
@@ -671,9 +702,20 @@ def renderItem(spawnedItems, amount):
                         attackMultiplier = 2
                         timeRemainingAttackBoost = 1000
                         spawnedItems.pop(x)
-                        break
+                        #break
                     else:
                         print("Attack boost already applied.")
+                if spawnedItems[x][1] == "powerup" and spawnedItems[x][0] == 2:
+                    if playerHealth == 100:
+                        print("Player already has full health.")
+                    else:
+                        if playerHealth < 80:
+                            playerHealth += 20
+                        else:
+                            playerHealth = 100
+                        spawnedItems.pop(x)
+                        #break
+
 
 
 def jump(): # Is called when the player jumps, calculates the player movement up and down when jumping, as well as stopping the jump when landing.
@@ -942,67 +984,68 @@ while True:
         left = key[pygame.K_a] or key[pygame.K_LEFT]
         right = key[pygame.K_d] or key[pygame.K_RIGHT]
 
-        if jumping:
-            jump()
+        if not gameLost:
+            if jumping:
+                jump()
 
-        move = pygame.math.Vector2(right - left, 0)
-        if not jumping:
-            move.y -= gravity
-        if move.length_squared() > 0:
-            move.scale_to_length(screenWidth / speed)
+            move = pygame.math.Vector2(right - left, 0)
+            if not jumping:
+                move.y -= gravity
+            if move.length_squared() > 0:
+                move.scale_to_length(screenWidth / speed)
 
-            nextPlayer_x = player.move(move.x, 0)
-            for x, tileRectRow in enumerate(tileRect):
-                for y, tileRectRowColumn in enumerate(tileRectRow):
-                    if nextPlayer_x.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL):
-                        if move.x > 0:  # moving right
-                            move.x = 0
-                        elif move.x < 0:  # moving left
-                            move.x = 0
-                        # print("X collision")
-                        break
+                nextPlayer_x = player.move(move.x, 0)
+                for x, tileRectRow in enumerate(tileRect):
+                    for y, tileRectRowColumn in enumerate(tileRectRow):
+                        if nextPlayer_x.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL):
+                            if move.x > 0:  # moving right
+                                move.x = 0
+                            elif move.x < 0:  # moving left
+                                move.x = 0
+                            # print("X collision")
+                            break
 
-            nextPlayer_y = player.move(0, move.y)
-            for x, tileRectRow in enumerate(tileRect):
-                for y, tileRectRowColumn in enumerate(tileRectRow):
-                    if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL):
-                        if move.y > 0:  # moving down
-                            move.y = 0
-                        elif move.y < 0:  # moving up
-                            move.y = 0
-                        # print("Y collision")
-                        break
+                nextPlayer_y = player.move(0, move.y)
+                for x, tileRectRow in enumerate(tileRect):
+                    for y, tileRectRowColumn in enumerate(tileRectRow):
+                        if nextPlayer_y.colliderect(tileRect[x][y]) and (map[x][y] == GRID_COLOR or map[x][y] == WALL_COLOR or map[x][y] == FLOOR_NEXT_COL):
+                            if move.y > 0:  # moving down
+                                move.y = 0
+                            elif move.y < 0:  # moving up
+                                move.y = 0
+                            # print("Y collision")
+                            break
 
-            if playerPosition[0] <= -3268.8:
-                if move.x > 0:
-                    move.x = 0
-                playerPosition[0] = -3268.8
-            if playerPosition[0] >= 561:
-                if move.x < 0:
-                    move.x = 0
-                playerPosition[0] = 561
-            if playerPosition[1] <= -1776:
-                if move.y > 0:
-                    move.y = 0
-                playerPosition[1] = -1776
-            if playerPosition[1] >= 315.2:
-                if move.y < 0:
-                    move.y = 0
-                playerPosition[1] = 315.2
+                if playerPosition[0] <= -3268.8:
+                    if move.x > 0:
+                        move.x = 0
+                    playerPosition[0] = -3268.8
+                if playerPosition[0] >= 561:
+                    if move.x < 0:
+                        move.x = 0
+                    playerPosition[0] = 561
+                if playerPosition[1] <= -1776:
+                    if move.y > 0:
+                        move.y = 0
+                    playerPosition[1] = -1776
+                if playerPosition[1] >= 315.2:
+                    if move.y < 0:
+                        move.y = 0
+                    playerPosition[1] = 315.2
 
 
-            playerPosition[0] -= move.x
-            playerPosition[1] -= move.y
-            fileLine[2] = playerPosition
+                playerPosition[0] -= move.x
+                playerPosition[1] -= move.y
+                fileLine[2] = playerPosition
 
-        if timeRemainingSpeedBoost > 0:
-            if timeRemainingSpeedBoost == 1:
-                speed = 400
-            timeRemainingSpeedBoost -= 1
-        if timeRemainingAttackBoost > 0:
-            if timeRemainingAttackBoost == 1:
-                attackMultiplier = 1
-            timeRemainingAttackBoost -= 1
+            if timeRemainingSpeedBoost > 0:
+                if timeRemainingSpeedBoost == 1:
+                    speed = 400
+                timeRemainingSpeedBoost -= 1
+            if timeRemainingAttackBoost > 0:
+                if timeRemainingAttackBoost == 1:
+                    attackMultiplier = 1
+                timeRemainingAttackBoost -= 1
 
 
 
