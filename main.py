@@ -575,9 +575,10 @@ def Attack(weaponType, origin):
         if origin == player:
             bulletsFired.append([playerGridPosition, pygame.Rect(player.x + (player.width/2), player.y + player.height - (player.height * (1/3)), player.width * (4/5), player.height * (1/3)), math.atan2((pygame.mouse.get_pos()[1] - player.y), (pygame.mouse.get_pos()[0] - player.x)), origin])
         else:
-            if timeSinceWand[origin+1] > randomGunAttackTime:
-                bulletsFired.append([spawnedEnemies[origin][2], pygame.Rect(enemiesRendered[origin].x + (enemiesRendered[origin].width / 2), enemiesRendered[origin].y + enemiesRendered[origin].height - (player.height * (1 / 3)),player.width * (4 / 5), player.height * (1 / 3)), math.atan2((player.y - enemiesRendered[origin].y), (player.x - enemiesRendered[origin].x)), origin])
-                randomGunAttackTime = random.randint(45, 60)
+            # if timeSinceWand[origin+1] > randomGunAttackTime:
+            #     bulletsFired.append([spawnedEnemies[origin][2], pygame.Rect(enemiesRendered[origin].x + (enemiesRendered[origin].width / 2), enemiesRendered[origin].y + enemiesRendered[origin].height - (player.height * (1 / 3)),player.width * (4 / 5), player.height * (1 / 3)), math.atan2((player.y - enemiesRendered[origin].y), (player.x - enemiesRendered[origin].x)), origin])
+            #     randomGunAttackTime = random.randint(45, 60)
+            pass
     elif weaponType == 1:
         for x in range(len(spawnedEnemies)):
             if abs(enemiesRendered[x].x - player.x) < 30 and abs(enemiesRendered[x].y - player.y) < 40 and timeSinceSword > randomAttackTime:
@@ -627,7 +628,7 @@ def manageBullets():
                     continue
                 if wandFired[x][2].colliderect(player):
                     if playerHealth <= 1:
-                        pass
+                        playerHealth = 0
                     else:
                         playerHealth = int((playerHealth * (5/6))//1)
                     wandFired.pop(x)
