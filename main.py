@@ -272,7 +272,13 @@ def loadFile(file):
                     map[y][x] = GRID_COLOR
 
 
-def mainMenu(menu): # Shows and handles almost everything related to the main menu, menu parameter controls which menu is currently showing
+def mainMenu(menu):
+    # Shows and handles almost everything related to the main menu
+    # It determines which buttons to show, then displays them on the screen.
+    # Input:
+    #   menu - string, controls which menu is currently showing
+    # Output:
+    #   displays the current menu on the screen
     global menuNameTextRect
     global volume
     global buttonsList
@@ -330,6 +336,10 @@ mapGenerated = False
 
 inThread = False
 def pathfinding():
+    # Determines if the enemies should be moving.
+    # for each enemy, it finds the players position, the enemies position, the possible paths that can be taken, and finally whether a path exists between the enemy and the player
+    # It then moves the enemy in the direction of the player (or away, if that is what the pathfinding finds) if a path was found.
+    # A new path for each enemy is only generated every 50 frames, however the enemy is moved every frame.
     global enemiesToMove, grid, spawnedEnemies, playerGridPosition, pathGrid, pathTicks, inThread, onGroundMap
     inThread = True
     # print(playerGridPosition)
@@ -385,7 +395,14 @@ def pathfinding():
     inThread = False
 
 
-def playGame(file): # Handles most of the gameplay TODO: Split into multiple functions
+def playGame(file): # TODO: Split into multiple functions
+    # Handles most of the gameplay.
+    # The main game function where most other functions are called (other than menu functions)
+    # Sets up the file if it is the first time running the file
+    # loads everything in the first frame
+    # manages player health, enemy health, enemy/player attacks, UI elements, starting pathfinding, etc.
+    # Input:
+    #   file - string, the file that is currently open
     global playerPosition, playerGridPosition, fileLine, firstTimeRun, enemyPreviousPosition, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread, mouseNotUp
     if firstTimeRun == True:
         with open(f"gamesaves/{file}", "r") as f:
@@ -405,12 +422,6 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
             playerPosition = [90, -10]
             fileLine[2] = playerPosition
             map = []
-            # Set dimension of cells and their initial configuration
-            cells = np.random.choice(2, size=(60, 80), p=[0.38, 0.62])
-            cells[0:60, 0] = 1
-            cells[0, 0:80] = 1
-            cells[0:60, 79] = 1
-            cells[59, 0:80] = 1
             if not mapGenerated:
                 map = []
                 randomMaps = []
@@ -448,18 +459,6 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
         enemyPreviousPosition = []
         for x in range(len(spawnedEnemies)):
             enemyPreviousPosition.append(spawnedEnemies[x][2])
-
-
-    #    running = 34
-    # if mapGenerated:
-        # if running > 0:
-        #     map = []
-        #     cells = update(screen, cells, size, with_progress=True)
-        #     running -= 1
-    # backgroundImage = pygame.image.load('Seasonal Tilesets/1 - Grassland/Background parts/_Complete_static_BG_(288 x ''208).png')
-    # backgroundImage = pygame.transform.scale(backgroundImage, (screenWidth, screenHeight))
-    # screen.blit(backgroundImage, (0, 0))
-    # print("map len " + str(len(map)) + " " + str(len(map[0])))
     screen.fill((50, 50, 50))
     tileRect = []
     tile = []
@@ -536,6 +535,7 @@ def playGame(file): # Handles most of the gameplay TODO: Split into multiple fun
         enemyPreviousPosition[x] = spawnedEnemies[x][2]
 
 def lostGame():
+    # If the player has died, this function is called and displays this screen which created a gray translucent background, and displays "GAME OVER!" and two buttons to respawn or go to the menu.
     lostGameRect = pygame.Rect(0, 0, screenWidth, screenHeight)
     draw_rect_alpha(screen, (50,50,50, 128), lostGameRect)
     lostGameText = font.render("GAME OVER!", True, (255, 0, 0))
@@ -545,16 +545,20 @@ def lostGame():
     button('Menu', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100), toMenu)
 
 def respawn():
+    # currently not working, will fix in v2
     gameLost = False
 
 def toMenu():
+    # takes the user back to the main menu. This function is called when the player presses the button to go to the menu on the game over screen.
     global mapGenerated, inGame, loadMenu
     menuEquals('main')
     mapGenerated = False
     inGame = False
     loadMenu = True
 
-def draw_rect_alpha(surface, color, rect): # sourced from https://stackoverflow.com/questions/6339057/draw-a-transparent-rectangles-and-polygons-in-pygame
+def draw_rect_alpha(surface, color, rect):
+    # sourced from https://stackoverflow.com/questions/6339057/draw-a-transparent-rectangles-and-polygons-in-pygame
+    # draws a translucent rectangle on the screen
     shape_surf = pygame.Surface(pygame.Rect(rect).size, pygame.SRCALPHA)
     pygame.draw.rect(shape_surf, color, shape_surf.get_rect())
     surface.blit(shape_surf, rect)
@@ -570,6 +574,13 @@ randomWandAttackTime = 120
 randomEnemyWandAttackTime = 120
 randomGunAttackTime = 60
 def Attack(weaponType, origin):
+    # called when the player or an enemy uses a weapon. Checks to see who fired the weapon, which weapon was used and whether the player is close enough to use the weapon.
+    # If all conditions are met, it then either lowers the enemy/player health (if it is a sword being used) or spawns a bullet/magic
+    # Input:
+    #   weaponType - string, determines which weapon is being used (sword, gun, wand)
+    #   origin - integer (if it is an enemy) or pygame.Rect (if it is the player), determines who fired the weapon
+    # Output:
+    #   if it is a gun or wand being fired, it appends to the wandFired or bulletsFired array
     global timeSinceSword, randomAttackTime, timeSinceWand, randomWandAttackTime, randomEnemyWandAttackTime, randomGunAttackTime
     if weaponType == 0:
         if origin == player:
@@ -607,11 +618,10 @@ def Attack(weaponType, origin):
                 timeSinceWand[origin+1] = 0
                 randomEnemyWandAttackTime = random.randint(300, 500)
 
-def win():
-    i
-
 
 def manageBullets():
+    # is called every frame.
+    # manages any current bullets; moves them, checks if they are colliding with an enemy/the player (if it is, it reduces the health of the player/enemy and removes the bullet), checks if it has been alive too long (if it is magic), checks if it has collided with any walls (if it is a bullet. if so, it removes it)
     global playerHealth, AttackMultiplier
     breakForLoop = False
     if wandFired:
@@ -705,6 +715,11 @@ def manageBullets():
 
 spawnedItems = []
 def spawnItem(type):
+    # called when the game is started. spawns a random item.
+    # Inputs:
+    #   type - string, determines whether it is a weapon or a powerup that is spawned.
+    # Outputs:
+    #   appends a weapon/powerup to the list of weapons/powerups spawned in a random location on the floor
     global spawnedItems
     location = (random.randint(0,66),random.randint(0,64))
     isDone = False
@@ -728,6 +743,12 @@ def spawnItem(type):
         spawnedItems.append([random.randint(0, len(weapons)-1), type, location])
 
 def renderItem(spawnedItems, amount):
+    # Is called every frame. Shows the items on screen. If the player is close, it shows text saying the name of the item/powerup and tells the user to press E to pick up.
+    # Input:
+    #   spawnedItems - array, the list of items to be rendered. It includes which item it is and where it is
+    #   amount - the amount of items
+    # Output:
+    #   a bunch of pygame.Rects which are displayed on screen; the items.
     global speed, timeRemainingSpeedBoost, attackMultiplier, timeRemainingAttackBoost, playerHealth
     itemsRendered = []
     width = screenWidth / 30
@@ -795,7 +816,9 @@ def renderItem(spawnedItems, amount):
 
 
 
-def jump(): # Is called when the player jumps, calculates the player movement up and down when jumping, as well as stopping the jump when landing.
+def jump():
+    # Is called when the player jumps
+    # calculates the player movement up and down when jumping, as well as stopping the jump when landing by checking if the player is colliding with anything below.
     global player
     global jumpCount
     global playerPosition
@@ -823,6 +846,10 @@ jumping = False
 
 spawnedEnemies = []
 def spawnEnemies():
+    # called at the beginning of the game. spawns 40 enemies.
+    # makes sure they are on the ground and not in a wall
+    # Output:
+    #   appends a random enemy and its location to spawnedEnemies
     for x in range(40):
         location = [random.randint(0, 66), random.randint(0, 64)]
         isDone = False
@@ -836,6 +863,10 @@ def spawnEnemies():
 
 enemiesRendered = []
 def renderEnemies():
+    # called every frame. shows the enemies on screen.
+    # if the player is nearby, it shows the enemy's health
+    # Output:
+    #   a bunch of pygame.Rects that are showed on the screen
     global spawnedEnemiesCopy, spawnedEnemies, enemiesRendered
     enemiesRendered = []
     if len(spawnedEnemies) > 0:
@@ -854,6 +885,10 @@ def renderEnemies():
 
 itemSelected = 1
 def renderInventory():
+    # shows the inventory at the bottom of the screen. shows which item is currenly selected, and checks to see if either inventory slot is clicked
+    # If an inventory slot is clicked, if it is the currently selected slot, it drops the item in the slot, if not, it switches to that item
+    # Output:
+    #   some rects which are displayed and show the inventory and items
     global itemSelected, mouseNotUp, playerGridPosition, inventoryBackground
     inventoryBackground = pygame.Rect(screenWidth/2 - 100, screenHeight - 100, 200, 80)
     selectedItem1Rect = pygame.Rect(screenWidth / 2 - 100, screenHeight - 100, 100, 80)
@@ -887,41 +922,13 @@ def renderInventory():
     if playerInventory[1] != []:
         pygame.draw.rect(screen, weapons[playerInventory[1][0]][1], item2Inventory)
 
-def update(screen, cells, size, with_progress=False): # Procedural generation, unused.
-    global map
 
-    # Create temporary matrix of zeros
-    temp = np.zeros((cells.shape[0], cells.shape[1]))
-
-    for row, col in np.ndindex(cells.shape):
-        if col == 0:
-            map.append([])
-        walls = np.sum(cells[row - 1:row + 2, col-1:col+2]) - cells[row, col]
-        colour = FLOOR_COLOR if cells[row, col] == 0 else WALL_COLOR
-
-        #Apply rules (if more than 4 walls create a wall, else a floor)
-        if walls > 4:
-            temp[row, col] = 1
-            if with_progress:
-                colour = WALL_COLOR
-        else:
-            if cells[row, col] == 1:
-                if with_progress:
-                    colour = FLOOR_NEXT_COL
-
-        # Append colour to map array
-        map[row].append(colour)
-
-    # Set borders to walls
-    temp[0:60, 0] = 1
-    temp[0, 0:80] = 1
-    temp[0:60, 79] = 1
-    temp[59, 0:80] = 1
-
-    return temp
-
-
-def saveFile(): # Saves the current file, used when exiting the game
+def saveFile():
+    # Saves the current file, called when exiting the game
+    # Input:
+    #   currentFile - string, the name of the file to be saved
+    # Output:
+    # writes the player location, the map details, and the fact that the file has been played to the file.
     global fileLine
     print(currentFile)
     fileLine[2] = str(playerPosition[0]) + " " + str(playerPosition[1])
@@ -962,6 +969,10 @@ timeRemainingSpeedBoost = 0
 timeRemainingAttackBoost = 0
 
 def isOnGround():
+    # Called at the beginning of the game. Determines which tiles are just above the ground.
+    # used when spawning enemies and items, and in enemy pathfinding.
+    # Output:
+    #   onGround - array, list of tiles which are just above the ground
     global onGround, onGroundMap
     onGround = []
     for x in range(len(map)):
@@ -1021,8 +1032,8 @@ while True:
                     playerPosition = [screenWidth, 0]
                 if event.key == pygame.K_e:
                     CollectItem = True
-            if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
-                toggleFullscreen()
+            # if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
+            #     toggleFullscreen()
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_SPACE:
                 if jumping == True:
@@ -1140,13 +1151,9 @@ while True:
 
 # FIXME: Player sometimes goes one pixel into the wall. No clue what causes it, it appears to be random. Player cannot move in other axis until moving away from the wall.
 # FIXME: Game crashes after making a game file and then trying to load that game file. For some reason loading the game file that was just created does not work.
-# FIXME: things can spawn in areas inaccessible to the player. this could just be an item or powerup that then cant be used, but it could also be an enemy, in which case the game cannot be won.
+# FIXME: things can spawn in areas inaccessible to the player. this could just be an item or powerup that then cant be used, but it could also be an enemy, in which case the game can only be won with the wand.
 # FIXME: soldiers and wizards go 1 too far left and 2 too far right, which can cause many issues.
 
-# Todo: Add enemy fighting
-# Todo: Add player health
-# Todo: Add death screen
-# Todo: Add difficulty settings
 # Todo: Save enemies, inventory, powerups, items, and health. (Is this needed?)
 # Todo: Optimise pathfinding (V2?)
 
@@ -1160,3 +1167,4 @@ while True:
 # Add sprites/assets
 # Add more items
 # Enemy idle movement
+# Add difficulty settings
