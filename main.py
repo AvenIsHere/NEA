@@ -2,7 +2,6 @@
 import sys
 import pygame
 from pygame.locals import QUIT
-import numpy as np
 import os
 import random
 import pathfinding
@@ -242,7 +241,7 @@ def loadFile(file):
     # Input:
     #   file - string, determines which file is loaded
     # Output:
-    #   Outputs 
+    #   Starts the game
 
     global inGame, loadMenu, currentFile, firstTimeRun, map, playerPosition, fileLine
     print(f'load {file}')
@@ -253,7 +252,7 @@ def loadFile(file):
     with open(f"gamesaves/{file}", "r") as f:
         fileLine = [line.strip() for line in f]
         print(fileLine)
-    if fileLine[1] == "firstplaythroughFalse":
+    if fileLine[1] == "firstPlaythroughFalse":
         playerPosition = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
         map = []
         mapTemp = fileLine[3].split("  ")
@@ -403,7 +402,7 @@ def playGame(file): # TODO: Split into multiple functions
     # manages player health, enemy health, enemy/player attacks, UI elements, starting pathfinding, etc.
     # Input:
     #   file - string, the file that is currently open
-    global playerPosition, playerGridPosition, fileLine, firstTimeRun, enemyPreviousPosition, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread, mouseNotUp
+    global playerPosition, playerGridPosition, fileLine, firstTimeRun, timeSinceGun, enemyPreviousPosition, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread, mouseNotUp
     if firstTimeRun == True:
         with open(f"gamesaves/{file}", "r") as f:
             fileLine = [line.strip() for line in f]
@@ -476,11 +475,11 @@ def playGame(file): # TODO: Split into multiple functions
     renderInventory()
     playerGridPosition = [int((((screenWidth/2) - playerPosition[0])/ tileWidth)//1), int(((screenHeight/2 - playerPosition[1])/ tileHeight)//1)]
     if not gameLost:
-        try:
+        if 'pathfindingThread' in globals():
+            # noinspection PyUnboundLocalVariable
             if not pathfindingThread.is_alive():
-                pathfindingThread = Thread(target=pathfinding)
                 pathfindingThread.start()
-        except:
+        else:
             pathfindingThread = Thread(target=pathfinding)
             pathfindingThread.start()
         if not inventoryBackground.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
@@ -488,6 +487,7 @@ def playGame(file): # TODO: Split into multiple functions
             Attack(playerInventory[itemSelected - 1][0], player)
             mouseNotUp = True
         timeSinceSword += 1
+        timeSinceGun += 1
         for x in range(len(timeSinceWand)):
             timeSinceWand[x] += 1
         for x in range(len(spawnedEnemies)):
@@ -529,10 +529,25 @@ def playGame(file): # TODO: Split into multiple functions
         enemiesRemainingText = font2.render(str(len(spawnedEnemies)) + " enemies remaining", True, (0, 0, 0))
         enemiesRemainingTextRect = enemiesRemainingText.get_rect(left=20, top=enemiesRemainingRect.bottom + 5)
         screen.blit(enemiesRemainingText, enemiesRemainingTextRect)
-    for x in range(len(spawnedEnemies)):
-        if spawnedEnemies[x][2] != enemyPreviousPosition[x]:
-            print("WHYYYYYYYYY")
-        enemyPreviousPosition[x] = spawnedEnemies[x][2]
+    if timeRemainingSpeedBoost > 0:
+        timeRemainingSpeedRect = pygame.Rect(20, enemiesRemainingTextRect.bottom + 5, 200 * (timeRemainingSpeedBoost / 1000), 20)
+        pygame.draw.rect(screen, (50, 50, 255), timeRemainingSpeedRect)
+        timeRemainingText = font2.render("Speed Boost", True, (0, 0, 0))
+        timeRemainingTextRect = timeRemainingText.get_rect(left=20, top=timeRemainingSpeedRect.bottom + 5)
+        screen.blit(timeRemainingText, timeRemainingTextRect)
+    if timeRemainingAttackBoost > 0:
+        if timeRemainingSpeedBoost > 0:
+            timeRemainingAttackRect = pygame.Rect(20, timeRemainingTextRect.bottom + 5, 200 * (timeRemainingAttackBoost / 1000), 20)
+            pygame.draw.rect(screen, (0, 200, 255), timeRemainingAttackRect)
+            timeRemainingText = font2.render("Damage x2", True, (0, 0, 0))
+            timeRemainingTextRect = timeRemainingText.get_rect(left=20, top=timeRemainingAttackRect.bottom + 5)
+            screen.blit(timeRemainingText, timeRemainingTextRect)
+        else:
+            timeRemainingAttackRect = pygame.Rect(20, enemiesRemainingTextRect.bottom + 5, 200 * (timeRemainingAttackBoost / 1000), 20)
+            pygame.draw.rect(screen, (0, 200, 255), timeRemainingAttackRect)
+            timeRemainingText = font2.render("Damage x2", True, (0, 0, 0))
+            timeRemainingTextRect = timeRemainingText.get_rect(left=20, top=timeRemainingAttackRect.bottom + 5)
+            screen.blit(timeRemainingText, timeRemainingTextRect)
 
 def lostGame():
     # If the player has died, this function is called and displays this screen which created a gray translucent background, and displays "GAME OVER!" and two buttons to respawn or go to the menu.
@@ -570,6 +585,7 @@ wandFired = []
 timeSinceSword = 30
 randomAttackTime = 30
 timeSinceWand = [0]
+timeSinceGun = 0
 randomWandAttackTime = 120
 randomEnemyWandAttackTime = 120
 randomGunAttackTime = 60
@@ -581,15 +597,17 @@ def Attack(weaponType, origin):
     #   origin - integer (if it is an enemy) or pygame.Rect (if it is the player), determines who fired the weapon
     # Output:
     #   if it is a gun or wand being fired, it appends to the wandFired or bulletsFired array
-    global timeSinceSword, randomAttackTime, timeSinceWand, randomWandAttackTime, randomEnemyWandAttackTime, randomGunAttackTime
+    global timeSinceSword, randomAttackTime, timeSinceGun, timeSinceWand, randomWandAttackTime, randomEnemyWandAttackTime, randomGunAttackTime
     if weaponType == 0:
         if origin == player:
-            bulletsFired.append([playerGridPosition, pygame.Rect(player.x + (player.width/2), player.y + player.height - (player.height * (1/3)), player.width * (4/5), player.height * (1/3)), math.atan2((pygame.mouse.get_pos()[1] - player.y), (pygame.mouse.get_pos()[0] - player.x)), origin])
+            if timeSinceGun > randomAttackTime:
+                bulletsFired.append([playerGridPosition, pygame.Rect(player.x + (player.width/2), player.y + player.height - (player.height * (1/3)), player.width * (4/5), player.height * (1/3)), math.atan2((pygame.mouse.get_pos()[1] - player.y), (pygame.mouse.get_pos()[0] - player.x)), origin])
+                timeSinceGun = 0
+                randomAttackTime = random.randint(10, 15)
         else:
-            # if timeSinceWand[origin+1] > randomGunAttackTime:
-            #     bulletsFired.append([spawnedEnemies[origin][2], pygame.Rect(enemiesRendered[origin].x + (enemiesRendered[origin].width / 2), enemiesRendered[origin].y + enemiesRendered[origin].height - (player.height * (1 / 3)),player.width * (4 / 5), player.height * (1 / 3)), math.atan2((player.y - enemiesRendered[origin].y), (player.x - enemiesRendered[origin].x)), origin])
-            #     randomGunAttackTime = random.randint(45, 60)
-            pass
+            if timeSinceWand[origin+1] > randomGunAttackTime:
+                bulletsFired.append([spawnedEnemies[origin][2], pygame.Rect(enemiesRendered[origin].x + (enemiesRendered[origin].width / 2), enemiesRendered[origin].y + enemiesRendered[origin].height - (player.height * (1 / 3)),player.width * (4 / 5), player.height * (1 / 3)), math.atan2((player.y - enemiesRendered[origin].y), (player.x - enemiesRendered[origin].x)), origin])
+                randomGunAttackTime = random.randint(45, 60)
     elif weaponType == 1:
         for x in range(len(spawnedEnemies)):
             if abs(enemiesRendered[x].x - player.x) < 30 and abs(enemiesRendered[x].y - player.y) < 40 and timeSinceSword > randomAttackTime:
@@ -1150,7 +1168,6 @@ while True:
     clock.tick(60)
 
 # FIXME: Player sometimes goes one pixel into the wall. No clue what causes it, it appears to be random. Player cannot move in other axis until moving away from the wall.
-# FIXME: Game crashes after making a game file and then trying to load that game file. For some reason loading the game file that was just created does not work.
 # FIXME: things can spawn in areas inaccessible to the player. this could just be an item or powerup that then cant be used, but it could also be an enemy, in which case the game can only be won with the wand.
 # FIXME: soldiers and wizards go 1 too far left and 2 too far right, which can cause many issues.
 
