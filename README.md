@@ -1,1 +1,1 @@
-NEA © 2023 by Aven Furness is licensed under CC BY-NC-SA 4.0 
+The source code is licensed under the GNU General Public License v3.0.
