@@ -119,10 +119,17 @@ class WeaponType(Enum):
     SWORD = 1
     WAND = 2
 
-weapon_info: dict[WeaponType, tuple[str, tuple[int, int, int]]] = {
-    WeaponType.GUN: ('Gun', (0, 200, 0)),
-    WeaponType.SWORD: ('Sword', (200,200,0)),
-    WeaponType.WAND: ('Wand', (100, 255, 255))
+@dataclasses.dataclass
+class Weapon:
+    type: WeaponType
+    name: str
+    colour: tuple[int, int, int]
+    cooldown: int
+
+weapon_info: dict[WeaponType, Weapon] = {
+    WeaponType.GUN: Weapon(WeaponType.GUN, 'Gun', (0, 200, 0), 0),
+    WeaponType.SWORD: Weapon(WeaponType.SWORD, 'Sword', (200,200,0), 0),
+    WeaponType.WAND: Weapon(WeaponType.WAND, 'Wand', (100, 255, 255), 0)
 }
 
 @dataclasses.dataclass
@@ -137,6 +144,7 @@ class Enemy:
     enemy_type: EnemyType
     position: list[float]
     health: int
+    weapon: Weapon
     time_since_attack: int
 
 
@@ -920,7 +928,7 @@ def render_items(items):
                 enemyNameTextRect = enemyNameText.get_rect(center=(current_item.center[0], current_item.center[1]))
                 screen.blit(enemyNameText, enemyNameTextRect)
         elif items[x][1] == "weapon":
-            pygame.draw.rect(screen, weapon_info[items[x][0]][1], current_item)
+            pygame.draw.rect(screen, weapon_info[items[x][0]].colour, current_item)
         if abs(player.x - current_item[0]) < 100 and abs(player.y - current_item[1]) < 100:
             if items[x][1] == "powerup":
                 itemText = font2.render(powerups[items[x][0]][0], True, (30, 30, 30))
@@ -930,7 +938,7 @@ def render_items(items):
                 screen.blit(itemText, itemTextRect)
                 screen.blit(itemText2, itemTextRect2)
             if items[x][1] == "weapon":
-                itemText = font2.render(weapon_info[items[x][0]][0], True, (30, 30, 30))
+                itemText = font2.render(weapon_info[items[x][0]].name, True, (30, 30, 30))
                 itemTextRect = itemText.get_rect(center=(current_item.center[0],current_item.center[1] - 20))
                 itemText2 = font3.render("Press E to pick up", True, (30,30,30))
                 itemTextRect2 = itemText2.get_rect(center=(current_item.center[0],current_item.center[1] - 35))
@@ -978,6 +986,10 @@ jumping = False
 
 spawnedEnemies: list[Enemy] = []
 
+def new_weapon(weapon_type: WeaponType | None = None) -> Weapon:
+    if weapon_type is None: weapon_type = random.choice(list(WeaponType))
+    return Weapon(weapon_type, weapon_info[weapon_type].name, weapon_info[weapon_type].colour, 0)
+
 def spawnEnemies(number):
     # called at the beginning of the game. spawns 40 enemies.
     # makes sure they are on the ground and not in a wall
@@ -986,8 +998,8 @@ def spawnEnemies(number):
     return_enemies = []
     for x in range(number):
         location = onGround[random.randint(0, len(onGround)-1)]
-        enemy_type = random.randint(0, len(enemy_types) - 1)
-        return_enemies.append(Enemy(enemy_types[enemy_type], location, 100, 0))
+        enemy_type = random.choice(enemy_types)
+        return_enemies.append(Enemy(enemy_type, location, 100, new_weapon(enemy_type.weapon), 0))
     return return_enemies
 
 enemiesRendered = []
@@ -1029,27 +1041,36 @@ def renderInventory():
     slot_1_item = pygame.Rect(screenWidth / 2 + 50 - 15, screenHeight - 60 - 12.5, 30, 25)
     draw_rect_alpha(screen, (0,0,0,128), inventoryBackground)
     inv_slots = [inv_slot_0, inv_slot_1]
-    controller_inv_button = [5, 4]
+    controller_inv_button = [4, 5]
 
     draw_rect_alpha(screen, (200, 200, 200, 128), inv_slots[itemSelected])
-    if (pygame.mouse.get_pressed()[0] and inv_slots[1-itemSelected].collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False) or ((joysticks and joysticks[0].get_button(controller_inv_button[itemSelected])) and ButtonNotUp == False):
-        itemSelected = 1-itemSelected
-        if pygame.mouse.get_pressed()[0]:
-            mouseNotUp = True
-        if (joysticks and joysticks[0].get_button(controller_inv_button[itemSelected])):
-            ButtonNotUp = True
-    if (pygame.mouse.get_pressed()[0] and inv_slots[itemSelected].collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False) or ((joysticks and joysticks[0].get_button(controller_inv_button[1-itemSelected])) and ButtonNotUp == False) and playerInventory[itemSelected] != []:
+
+    inventory_slot_pressed: list[bool] = [
+        (pygame.mouse.get_pressed()[0] and inv_slots[n].collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False) or
+        ((joysticks != [] and joysticks[0].get_button(controller_inv_button[n])) and ButtonNotUp == False)
+        for n in range(len(inv_slots))
+    ]
+
+    # drop item
+    if inventory_slot_pressed[itemSelected] and playerInventory[itemSelected] != []:
         spawnedItems.append([playerInventory[itemSelected][0], playerInventory[itemSelected][1], (playerGridPosition[0], playerGridPosition[1])])
         playerInventory[itemSelected] = []
         if pygame.mouse.get_pressed()[0]:
             mouseNotUp = True
-        if (joysticks and joysticks[0].get_button(controller_inv_button[1-itemSelected])):
+        if (joysticks and joysticks[0].get_button(controller_inv_button[1 - itemSelected])):
             ButtonNotUp = True
 
-    if playerInventory[0] != []:
-        pygame.draw.rect(screen, weapon_info[playerInventory[0][0]][1], slot_0_item)
-    if playerInventory[1] != []:
-        pygame.draw.rect(screen, weapon_info[playerInventory[1][0]][1], slot_1_item)
+    # switch inventory slots
+    if inventory_slot_pressed[1-itemSelected]:
+        itemSelected = 1-itemSelected
+        if pygame.mouse.get_pressed()[0]:
+            mouseNotUp = True
+        if joysticks and joysticks[0].get_button(controller_inv_button[itemSelected]):
+            ButtonNotUp = True
+
+    for i in range(len(inv_slots)):
+        if playerInventory[i]:
+            pygame.draw.rect(screen, weapon_info[playerInventory[i][0]].colour, slot_0_item)
 
 
 def saveFile():
