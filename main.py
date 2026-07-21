@@ -155,7 +155,7 @@ def button(text, position, size, colour, action=None, *args):
     text = font.render(text, True, (0, 0, 0)) # creates the text to write on the screen
     textRect = text.get_rect(center=button_rect.center) # creates a pygame rect for the text on the screen in the middle of the button
     screen.blit(text, textRect) # draws the text on the screen
-    if button_rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0] and mouseNotUp == False and action != None: # determines whether or not the button has been pressed
+    if button_rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[0] and mouseNotUp == False and action is not None: # determines whether or not the button has been pressed
         action(*args) # does the action associated with pressing the button
         mouseNotUp = True
 
@@ -433,7 +433,7 @@ def generate_map(preset_maps, num_presets_x, num_presets_y):
     return world_map
 
 def load_save(file):
-    global playerPosition, enemiesDefeated, playerInventory, difficulty, attackMultiplierEnemies, healthBoostsGone, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
+    global playerPosition, enemiesDefeated, playerInventory, difficulty, attackMultiplierEnemies, healthBoostsGone, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
     playerInventory = [[], []]
     with open(f"gamesaves/{file}", "r") as f:
         fileLine = [line.strip() for line in f]
@@ -443,7 +443,6 @@ def load_save(file):
     enemiesDefeated = False
     gameLost = False
     pathTicks = 0
-    size = 10
     spawnedEnemies = []
     spawnedItems = []
     enemiesToMove = []
@@ -487,8 +486,31 @@ def load_save(file):
     for x in range(len(spawnedEnemies)):
         enemyPreviousPosition.append(spawnedEnemies[x].position)
 
+@dataclasses.dataclass
+class UIBar:
+    percent: float
+    text: str
+    colour: tuple[int, int, int]
+
+def handle_UI(player_health: int, num_enemies: int, speed_boost_remaining: int, attack_boost_remaining: int) -> None:
+
+    ui_items: list[UIBar] = []
+
+    if player_health > 0: ui_items.append(UIBar(player_health / 100, str(player_health), (200, 25, 25)))
+    if num_enemies > 0: ui_items.append(UIBar(num_enemies / 40, str(num_enemies) + " enemies remaining", (128, 128, 128)))
+    if speed_boost_remaining > 0: ui_items.append(UIBar(speed_boost_remaining / 1000, "Speed Boost", (50, 50, 255)))
+    if attack_boost_remaining > 0: ui_items.append(UIBar(speed_boost_remaining / 1000, "Damage x2", (0, 200, 255)))
+
+    for index, ui_element in enumerate(ui_items):
+        element_bar = pygame.Rect(20, 20 + (index * 50), 200 * ui_element.percent, 20)
+        element_text = font2.render(ui_element.text, True, (0, 0, 0))
+        element_text_rect = element_text.get_rect(left=20, top=element_bar.bottom + 5)
+        pygame.draw.rect(screen, ui_element.colour, element_bar)
+        screen.blit(element_text, element_text_rect)
+
 pathfindingThread = Thread(target=do_pathfinding)
-def playGame(): # TODO: Split into multiple functions
+
+def game_frame() -> None: # TODO: Split into multiple functions
     # Handles most of the gameplay.
     # The main game function where most other functions are called (other than menu functions)
     # Sets up the file if it is the first time running the file
@@ -496,7 +518,7 @@ def playGame(): # TODO: Split into multiple functions
     # manages player health, enemy health, enemy/player attacks, UI elements, starting pathfinding, etc.
     # Input:
     #   file - string, the file that is currently open
-    global playerPosition, pathfindingThread, enemiesDefeated, playerInventory, difficulty, attackMultiplierEnemies, healthBoostsGone, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, size, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
+    global playerPosition, pathfindingThread, enemiesDefeated, playerInventory, difficulty, attackMultiplierEnemies, healthBoostsGone, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
     screen.fill((50, 50, 50))
     tileRect = []
     tile = []
@@ -519,7 +541,7 @@ def playGame(): # TODO: Split into multiple functions
             pathfindingThread = Thread(target=do_pathfinding)
             pathfindingThread.start()
         if not inventoryBackground.collidepoint(pygame.mouse.get_pos()) and ((pygame.mouse.get_pressed()[
-            0] and mouseNotUp == False) or ((joysticks and joysticks[0].get_axis(5) > 0.5) and TriggerNotUp == False)) and ((itemSelected == 0 and playerInventory[0] != []) or (itemSelected == 1 and playerInventory[1] != [])):
+            0] and mouseNotUp == False) or ((joysticks and joysticks[0].get_axis(5) > 0.5) and TriggerNotUp == False)) and playerInventory[itemSelected] != []:
 
             if pygame.mouse.get_pressed()[0]:
                 mouseNotUp = True
@@ -575,37 +597,7 @@ def playGame(): # TODO: Split into multiple functions
     manageBullets()
     if not spawnedEnemies:
         enemiesDefeated = True
-    playerHealthRect = pygame.Rect(20, 20, 200 * (playerHealth / 100), 20)
-    playerHealthText = font2.render(str(playerHealth), True, (0, 0, 0))
-    playerHealthTextRect = playerHealthText.get_rect(left=20, top=playerHealthRect.bottom + 5)
-    if playerHealth > 0:
-        pygame.draw.rect(screen, (200, 25, 25), playerHealthRect)
-        screen.blit(playerHealthText, playerHealthTextRect)
-    if len(spawnedEnemies) > 0:
-        enemiesRemainingRect = pygame.Rect(20, playerHealthTextRect.bottom + 5, 200 * (len(spawnedEnemies) / 40), 20)
-        pygame.draw.rect(screen, (128, 128, 128), enemiesRemainingRect)
-        enemiesRemainingText = font2.render(str(len(spawnedEnemies)) + " enemies remaining", True, (0, 0, 0))
-        enemiesRemainingTextRect = enemiesRemainingText.get_rect(left=20, top=enemiesRemainingRect.bottom + 5)
-        screen.blit(enemiesRemainingText, enemiesRemainingTextRect)
-    if timeRemainingSpeedBoost > 0:
-        timeRemainingSpeedRect = pygame.Rect(20, enemiesRemainingTextRect.bottom + 5, 200 * (timeRemainingSpeedBoost / 1000), 20)
-        pygame.draw.rect(screen, (50, 50, 255), timeRemainingSpeedRect)
-        timeRemainingText = font2.render("Speed Boost", True, (0, 0, 0))
-        timeRemainingTextRect = timeRemainingText.get_rect(left=20, top=timeRemainingSpeedRect.bottom + 5)
-        screen.blit(timeRemainingText, timeRemainingTextRect)
-    if timeRemainingAttackBoost > 0:
-        if timeRemainingSpeedBoost > 0:
-            timeRemainingAttackRect = pygame.Rect(20, timeRemainingTextRect.bottom + 5, 200 * (timeRemainingAttackBoost / 1000), 20)
-            pygame.draw.rect(screen, (0, 200, 255), timeRemainingAttackRect)
-            timeRemainingText = font2.render("Damage x2", True, (0, 0, 0))
-            timeRemainingTextRect = timeRemainingText.get_rect(left=20, top=timeRemainingAttackRect.bottom + 5)
-            screen.blit(timeRemainingText, timeRemainingTextRect)
-        else:
-            timeRemainingAttackRect = pygame.Rect(20, enemiesRemainingTextRect.bottom + 5, 200 * (timeRemainingAttackBoost / 1000), 20)
-            pygame.draw.rect(screen, (0, 200, 255), timeRemainingAttackRect)
-            timeRemainingText = font2.render("Damage x2", True, (0, 0, 0))
-            timeRemainingTextRect = timeRemainingText.get_rect(left=20, top=timeRemainingAttackRect.bottom + 5)
-            screen.blit(timeRemainingText, timeRemainingTextRect)
+    handle_UI(playerHealth, len(spawnedEnemies), timeRemainingSpeedBoost, timeRemainingAttackBoost)
 
 def lostGame():
     # If the player has died, this function is called and displays this screen which creates a gray translucent background, and displays "GAME OVER!" and two buttons to respawn or go to the menu.
@@ -632,7 +624,6 @@ def respawn():
     gameLost = False
     mapGenerated = False
     loadFile(currentFile)
-    load_save(currentFile)
 
 def toMenu():
     # takes the user back to the main menu. This function is called when the player presses the button to go to the menu on the game over screen.
@@ -1196,7 +1187,7 @@ while True:
     keys = pygame.key.get_pressed()
 
     if inGame:
-        playGame()
+        game_frame()
 
         key = pygame.key.get_pressed()
 
