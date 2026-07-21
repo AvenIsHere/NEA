@@ -1,6 +1,7 @@
 # importing different libraries
 import dataclasses
 import sys
+from enum import Enum
 from typing import Any
 
 import pygame
@@ -107,35 +108,42 @@ PresetMaps = [ # the maps used in the game. "-" is the floors/walls (where the p
      '-------     ---']
 ]
 
-powerups = [['Increased speed', (0,0,200)],
-            ['Damage x2', (0,200,200)],
-            ['+20 health', (200, 25, 25)]
-
+powerups = [
+    ['Increased speed', (0,0,200)],
+    ['Damage x2', (0,200,200)],
+    ['+20 health', (200, 25, 25)]
 ]
 
-weapons = [['Gun', (0,200,0)],
-           ['Sword', (200,200,0)],
-           ['Wand', (100, 255, 255)]
+class WeaponType(Enum):
+    GUN = 0
+    SWORD = 1
+    WAND = 2
 
-]
+weapon_info: dict[WeaponType, tuple[str, tuple[int, int, int]]] = {
+    WeaponType.GUN: ('Gun', (0, 200, 0)),
+    WeaponType.SWORD: ('Sword', (200,200,0)),
+    WeaponType.WAND: ('Wand', (100, 255, 255))
+}
 
 @dataclasses.dataclass
 class EnemyType:
     name: str
-    colour: tuple
+    initial: str
+    colour: tuple[int, int, int]
+    weapon: WeaponType
 
 @dataclasses.dataclass
 class Enemy:
     enemy_type: EnemyType
-    position: list
+    position: list[float]
     health: int
     time_since_attack: int
 
 
-enemies: list[EnemyType] = [
-    EnemyType('Knight', (200,75,0)),
-    EnemyType('Wizard', (200,0,75)),
-    EnemyType('Soldier', (0,0,100))
+enemy_types: list[EnemyType] = [
+    EnemyType('Knight', 'K', (200,75,0), WeaponType.SWORD),
+    EnemyType('Wizard', 'W', (200,0,75), WeaponType.WAND),
+    EnemyType('Soldier', 'W', (0,0,100), WeaponType.GUN)
 ]
 
 inGame = False
@@ -576,9 +584,9 @@ def game_frame() -> None: # TODO: Split into multiple functions
             distance = pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
             if distance.length() < 300:
                 if spawnedEnemies[x].enemy_type.name == 'Wizard':
-                    attack(2, x)
+                    attack(WeaponType.WAND, x)
                 if spawnedEnemies[x].enemy_type.name == 'Soldier':
-                    attack(0, x)
+                    attack(WeaponType.GUN, x)
                 randomEnemyAttackTime = random.randint(60, 85)
         for x in range(len(timeSinceEnemyAttack)):
             timeSinceEnemyAttack[x] += 1
@@ -672,7 +680,7 @@ def attack(weaponType, origin, controller=False):
     # Output:
     #   if it is a gun or wand being fired, it appends to the wandFired or bulletsFired array
     global timeSinceSword, randomAttackTime, timeSinceGun, timeSinceWand, randomWandAttackTime, randomEnemyWandAttackTime, randomGunAttackTime
-    if weaponType == 0:
+    if weaponType == WeaponType.GUN:
         if origin == player:
             if timeSinceGun > randomAttackTime:
                 if controller == False:
@@ -694,7 +702,7 @@ def attack(weaponType, origin, controller=False):
                                     colliding = True
                 if not colliding:
                     randomGunAttackTime = random.randint(45, 60)
-    elif weaponType == 1:
+    elif weaponType == WeaponType.SWORD:
         for x in range(len(spawnedEnemies)):
             if abs(enemiesRendered[x].x - player.x) < 30 and abs(enemiesRendered[x].y - player.y) < 40 and timeSinceSword > randomAttackTime:
                 spawnedEnemies[x].health -= attackStrength * attackMultiplier
@@ -702,7 +710,7 @@ def attack(weaponType, origin, controller=False):
                     spawnedEnemies.pop(x)
                 timeSinceSword = 0
                 randomAttackTime = random.randint(25, 40)
-    elif weaponType == 2:
+    elif weaponType == WeaponType.WAND:
         if origin == player:
             if timeSinceWand[0] > randomWandAttackTime:
                 for x in range(len(spawnedEnemies)):
@@ -852,7 +860,7 @@ def spawnItem(type, healthBoost=False):
         else:
             return_items = [random.randint(0, len(powerups)-1), type, location]
     elif type == "weapon":
-        return_items = [random.randint(0, len(weapons)-1), type, location]
+        return_items = [random.choice(list(WeaponType)), type, location]
     return return_items
 
 def collect_item(items, items_rendered):
@@ -912,7 +920,7 @@ def render_items(items):
                 enemyNameTextRect = enemyNameText.get_rect(center=(current_item.center[0], current_item.center[1]))
                 screen.blit(enemyNameText, enemyNameTextRect)
         elif items[x][1] == "weapon":
-            pygame.draw.rect(screen, weapons[items[x][0]][1], current_item)
+            pygame.draw.rect(screen, weapon_info[items[x][0]][1], current_item)
         if abs(player.x - current_item[0]) < 100 and abs(player.y - current_item[1]) < 100:
             if items[x][1] == "powerup":
                 itemText = font2.render(powerups[items[x][0]][0], True, (30, 30, 30))
@@ -922,7 +930,7 @@ def render_items(items):
                 screen.blit(itemText, itemTextRect)
                 screen.blit(itemText2, itemTextRect2)
             if items[x][1] == "weapon":
-                itemText = font2.render(weapons[items[x][0]][0], True, (30, 30, 30))
+                itemText = font2.render(weapon_info[items[x][0]][0], True, (30, 30, 30))
                 itemTextRect = itemText.get_rect(center=(current_item.center[0],current_item.center[1] - 20))
                 itemText2 = font3.render("Press E to pick up", True, (30,30,30))
                 itemTextRect2 = itemText2.get_rect(center=(current_item.center[0],current_item.center[1] - 35))
@@ -978,8 +986,8 @@ def spawnEnemies(number):
     return_enemies = []
     for x in range(number):
         location = onGround[random.randint(0, len(onGround)-1)]
-        enemy_type = random.randint(0, len(enemies)-1)
-        return_enemies.append(Enemy(enemies[enemy_type], location, 100, 0))
+        enemy_type = random.randint(0, len(enemy_types) - 1)
+        return_enemies.append(Enemy(enemy_types[enemy_type], location, 100, 0))
     return return_enemies
 
 enemiesRendered = []
@@ -1039,9 +1047,9 @@ def renderInventory():
             ButtonNotUp = True
 
     if playerInventory[0] != []:
-        pygame.draw.rect(screen, weapons[playerInventory[0][0]][1], slot_0_item)
+        pygame.draw.rect(screen, weapon_info[playerInventory[0][0]][1], slot_0_item)
     if playerInventory[1] != []:
-        pygame.draw.rect(screen, weapons[playerInventory[1][0]][1], slot_1_item)
+        pygame.draw.rect(screen, weapon_info[playerInventory[1][0]][1], slot_1_item)
 
 
 def saveFile():
