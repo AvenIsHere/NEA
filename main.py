@@ -1,6 +1,8 @@
 # importing different libraries
 import dataclasses
 import sys
+from typing import Any
+
 import pygame
 from pygame.locals import QUIT
 import os
@@ -499,7 +501,7 @@ def handle_UI(player_health: int, num_enemies: int, speed_boost_remaining: int, 
     if player_health > 0: ui_items.append(UIBar(player_health / 100, str(player_health), (200, 25, 25)))
     if num_enemies > 0: ui_items.append(UIBar(num_enemies / 40, str(num_enemies) + " enemies remaining", (128, 128, 128)))
     if speed_boost_remaining > 0: ui_items.append(UIBar(speed_boost_remaining / 1000, "Speed Boost", (50, 50, 255)))
-    if attack_boost_remaining > 0: ui_items.append(UIBar(speed_boost_remaining / 1000, "Damage x2", (0, 200, 255)))
+    if attack_boost_remaining > 0: ui_items.append(UIBar(attack_boost_remaining / 1000, "Damage x2", (0, 200, 255)))
 
     for index, ui_element in enumerate(ui_items):
         element_bar = pygame.Rect(20, 20 + (index * 50), 200 * ui_element.percent, 20)
@@ -510,6 +512,29 @@ def handle_UI(player_health: int, num_enemies: int, speed_boost_remaining: int, 
 
 pathfindingThread = Thread(target=do_pathfinding)
 
+@dataclasses.dataclass
+class RenderedElements:
+    items_rendered: dict[Any, Any]
+    tiles_rendered: list[list[pygame.Rect]]
+
+def render_frame(tile_map, player_health, num_enemies, speed_boost_remaining, attack_boost_remaining, player_rect) -> RenderedElements:
+    screen.fill((50, 50, 50))
+    tiles_rendered: list[list[pygame.Rect]] = []
+    for x, colour in enumerate(tile_map, start=0):
+        tiles_rendered.append([])
+        for y, tileColour in enumerate(colour, start=0):
+            tiles_rendered[x].append(pygame.Rect(((tileWidth) * (x)) + playerPosition[0],
+                                                 ((tileHeight) * (y)) + playerPosition[1],
+                                                 tileWidth + 1, tileHeight + 1))
+            pygame.draw.rect(screen, tileColour, tiles_rendered[x][y])
+    items_rendered = render_items(spawnedItems)
+    renderEnemies()
+    pygame.draw.rect(screen, (0, 255, 0), player_rect)
+    renderInventory()
+    handle_UI(player_health, num_enemies, speed_boost_remaining, attack_boost_remaining)
+    return RenderedElements(items_rendered, tiles_rendered)
+
+
 def game_frame() -> None: # TODO: Split into multiple functions
     # Handles most of the gameplay.
     # The main game function where most other functions are called (other than menu functions)
@@ -518,23 +543,10 @@ def game_frame() -> None: # TODO: Split into multiple functions
     # manages player health, enemy health, enemy/player attacks, UI elements, starting pathfinding, etc.
     # Input:
     #   file - string, the file that is currently open
-    global playerPosition, pathfindingThread, enemiesDefeated, playerInventory, difficulty, attackMultiplierEnemies, healthBoostsGone, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
-    screen.fill((50, 50, 50))
-    tileRect = []
-    tile = []
-    for x, colour in enumerate(tile_map, start=0):
-        tileRect.append([])
-        tile.append([])
-        for y, tileColour in enumerate(colour, start=0):
-            tileRect[x].append(pygame.Rect(((tileWidth) * (x)) + playerPosition[0],
-                                           ((tileHeight) * (y)) + playerPosition[1],
-                                           tileWidth + 1, tileHeight + 1))
-            tile[x].append([pygame.draw.rect(screen, tileColour, tileRect[x][y]), (255, 0, 0)])
-    items_rendered = render_items(spawnedItems)
-    if CollectItem: collect_item(spawnedItems, items_rendered)
-    renderEnemies()
-    pygame.draw.rect(screen, (0, 255, 0), player)
-    renderInventory()
+    global playerPosition, pathfindingThread, enemiesDefeated, playerInventory, difficulty, attackMultiplierEnemies, healthBoostsGone, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
+    render_data = render_frame(tile_map, playerHealth, len(spawnedEnemies), timeRemainingSpeedBoost, timeRemainingAttackBoost, player)
+    tileRect = render_data.tiles_rendered
+    if CollectItem: collect_item(spawnedItems, render_data.items_rendered)
     playerGridPosition = [int((((screenWidth/2) - playerPosition[0])/ tileWidth)//1), int(((screenHeight/2 - playerPosition[1])/ tileHeight)//1)]
     if not gameLost and not enemiesDefeated:
         if not pathfindingThread.is_alive():
@@ -597,7 +609,6 @@ def game_frame() -> None: # TODO: Split into multiple functions
     manageBullets()
     if not spawnedEnemies:
         enemiesDefeated = True
-    handle_UI(playerHealth, len(spawnedEnemies), timeRemainingSpeedBoost, timeRemainingAttackBoost)
 
 def lostGame():
     # If the player has died, this function is called and displays this screen which creates a gray translucent background, and displays "GAME OVER!" and two buttons to respawn or go to the menu.
