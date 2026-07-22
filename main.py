@@ -108,12 +108,6 @@ PresetMaps = [ # the maps used in the game. "-" is the floors/walls (where the p
      '-------     ---']
 ]
 
-powerups = [
-    ['Increased speed', (0,0,200)],
-    ['Damage x2', (0,200,200)],
-    ['+20 health', (200, 25, 25)]
-]
-
 class WeaponType(Enum):
     GUN = 0
     SWORD = 1
@@ -153,6 +147,33 @@ enemy_types: list[EnemyType] = [
     EnemyType('Wizard', 'W', (200,0,75), WeaponType.WAND),
     EnemyType('Soldier', 'W', (0,0,100), WeaponType.GUN)
 ]
+
+class PowerupType(Enum):
+    SPEED_BOOST = 0
+    DAMAGE_BOOST = 1
+    HEALTH_BOOST = 2
+
+@dataclasses.dataclass
+class Powerup:
+    type: PowerupType
+    name: str
+    colour: tuple[int, int, int]
+
+powerups: dict[PowerupType, Powerup] = {
+    PowerupType.SPEED_BOOST: Powerup(PowerupType.SPEED_BOOST, "Increased Speed", (0,0,200)),
+    PowerupType.DAMAGE_BOOST: Powerup(PowerupType.DAMAGE_BOOST, "Damage x2", (0,200,200)),
+    PowerupType.HEALTH_BOOST: Powerup(PowerupType.HEALTH_BOOST, "+20 Health", (200,25,25))
+}
+
+class ItemType(Enum):
+    WEAPON = 0
+    POWERUP = 1
+
+@dataclasses.dataclass
+class Item:
+    type: ItemType
+    item: Powerup | Weapon
+    location: tuple[int, int]
 
 inGame = False
 
@@ -450,9 +471,11 @@ def generate_map(preset_maps, num_presets_x, num_presets_y):
 
     return world_map
 
+playerInventory: list[Item | None] = []
+
 def load_save(file):
-    global playerPosition, enemiesDefeated, playerInventory, difficulty, attackMultiplierEnemies, healthBoostsGone, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, tile, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
-    playerInventory = [[], []]
+    global playerPosition, enemiesDefeated, playerInventory, difficulty, attackMultiplierEnemies, healthBoostsGone, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, tile_map, player, tileRect, tile, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
+    playerInventory = [None, None]
     with open(f"gamesaves/{file}", "r") as f:
         fileLine = [line.strip() for line in f]
     player = pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
@@ -479,20 +502,20 @@ def load_save(file):
     if fileLine[1] == "firstplaythroughTrue":
         playerPosition = [90, -10]
         fileLine[2] = playerPosition
-        map = generate_map(PresetMaps, 5, 5)
+        tile_map = generate_map(PresetMaps, 5, 5)
         fileLine[1] = 'firstPlaythroughFalse'
     isOnGround()
     playerGridPosition = [int((((screenWidth / 2) - playerPosition[0]) / tileWidth) // 1),
                           int((((screenHeight / 2) - playerPosition[1]) / tileHeight) // 1)]
     for x in range(20):
-        spawnedItems.append(spawnItem("powerup"))
-        spawnedItems.append(spawnItem("weapon"))
+        spawnedItems.append(spawn_item(ItemType.POWERUP))
+        spawnedItems.append(spawn_item(ItemType.WEAPON))
     if difficulty == 1:
         for x in range(10):
-            spawnedItems.append(spawnItem("powerup", True))
+            spawnedItems.append(spawn_item(ItemType.POWERUP, True))
     elif difficulty == 2:
         for x in range(5):
-            spawnedItems.append(spawnItem("powerup", True))
+            spawnedItems.append(spawn_item(ItemType.POWERUP, True))
     spawnedEnemies = spawnEnemies(40)
     timeSinceEnemyAttack = []
     for x in range(len(spawnedEnemies)):
@@ -510,7 +533,7 @@ class UIBar:
     text: str
     colour: tuple[int, int, int]
 
-def handle_UI(player_health: int, num_enemies: int, speed_boost_remaining: int, attack_boost_remaining: int) -> None:
+def render_UI(player_health: int, num_enemies: int, speed_boost_remaining: int, attack_boost_remaining: int) -> None:
 
     ui_items: list[UIBar] = []
 
@@ -533,8 +556,7 @@ class RenderedElements:
     items_rendered: dict[Any, Any]
     tiles_rendered: list[list[pygame.Rect]]
 
-def render_frame(tile_map, player_health, num_enemies, speed_boost_remaining, attack_boost_remaining, player_rect) -> RenderedElements:
-    screen.fill((50, 50, 50))
+def render_map(tile_map) -> list[list[pygame.Rect]]:
     tiles_rendered: list[list[pygame.Rect]] = []
     for x, colour in enumerate(tile_map, start=0):
         tiles_rendered.append([])
@@ -543,11 +565,16 @@ def render_frame(tile_map, player_health, num_enemies, speed_boost_remaining, at
                                                  ((tileHeight) * (y)) + playerPosition[1],
                                                  tileWidth + 1, tileHeight + 1))
             pygame.draw.rect(screen, tileColour, tiles_rendered[x][y])
+    return tiles_rendered
+
+def render_frame(tile_map, player_health, num_enemies, speed_boost_remaining, attack_boost_remaining, player_rect, player_inventory) -> RenderedElements:
+    screen.fill((50, 50, 50))
+    tiles_rendered = render_map(tile_map)
     items_rendered = render_items(spawnedItems)
-    renderEnemies()
+    render_enemies()
     pygame.draw.rect(screen, (0, 255, 0), player_rect)
-    renderInventory()
-    handle_UI(player_health, num_enemies, speed_boost_remaining, attack_boost_remaining)
+    render_inventory(player_inventory)
+    render_UI(player_health, num_enemies, speed_boost_remaining, attack_boost_remaining)
     return RenderedElements(items_rendered, tiles_rendered)
 
 
@@ -560,68 +587,69 @@ def game_frame() -> None: # TODO: Split into multiple functions
     # Input:
     #   file - string, the file that is currently open
     global playerPosition, pathfindingThread, enemiesDefeated, playerInventory, difficulty, attackMultiplierEnemies, healthBoostsGone, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, spawnedEnemies, timeSinceSword, timeSinceWand, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
-    render_data = render_frame(tile_map, playerHealth, len(spawnedEnemies), timeRemainingSpeedBoost, timeRemainingAttackBoost, player)
+    render_data = render_frame(tile_map, playerHealth, len(spawnedEnemies), timeRemainingSpeedBoost, timeRemainingAttackBoost, player, playerInventory)
     tileRect = render_data.tiles_rendered
-    if CollectItem: collect_item(spawnedItems, render_data.items_rendered)
     playerGridPosition = [int((((screenWidth/2) - playerPosition[0])/ tileWidth)//1), int(((screenHeight/2 - playerPosition[1])/ tileHeight)//1)]
-    if not gameLost and not enemiesDefeated:
-        if not pathfindingThread.is_alive():
-            pathfindingThread = Thread(target=do_pathfinding)
-            pathfindingThread.start()
-        if not inventoryBackground.collidepoint(pygame.mouse.get_pos()) and ((pygame.mouse.get_pressed()[
-            0] and mouseNotUp == False) or ((joysticks and joysticks[0].get_axis(5) > 0.5) and TriggerNotUp == False)) and playerInventory[itemSelected] != []:
-
-            if pygame.mouse.get_pressed()[0]:
-                mouseNotUp = True
-                attack(playerInventory[itemSelected][0], player)
-            if (joysticks and joysticks[0].get_axis(5) > 0.5):
-                TriggerNotUp = True
-                attack(playerInventory[itemSelected][0], player, True)
-        timeSinceSword += 1
-        timeSinceGun += 1
-        for x in range(len(timeSinceWand)):
-            timeSinceWand[x] += 1
-        for x in range(len(spawnedEnemies)):
-            if abs(enemiesRendered[x].x - player.x) < 30 and abs(enemiesRendered[x].y - player.y) < 40 and timeSinceEnemyAttack[x] > randomEnemyAttackTime:
-                if spawnedEnemies[x].enemy_type.name == 'Knight':
-                    timeSinceEnemyAttack[x] = 0
-                    playerHealth -= random.randint(2, 5) * attackMultiplierEnemies
-                    criticalHit = random.randint(0, 100)
-                    if criticalHit == 99:
-                        playerHealth -= 5 * attackMultiplierEnemies
-            distance = pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
-            if distance.length() < 300:
-                if spawnedEnemies[x].enemy_type.name == 'Wizard':
-                    attack(WeaponType.WAND, x)
-                if spawnedEnemies[x].enemy_type.name == 'Soldier':
-                    attack(WeaponType.GUN, x)
-                randomEnemyAttackTime = random.randint(60, 85)
-        for x in range(len(timeSinceEnemyAttack)):
-            timeSinceEnemyAttack[x] += 1
-        if not healthBoostsGone:
-            noHealthBoosts = True
-            for x in range(len(spawnedItems)):
-                if spawnedItems[x][0] == 2 and spawnedItems[x][1] == 'powerup':
-                    noHealthBoosts = False
-            if noHealthBoosts == True:
-                healthBoostsGone = True
-        else:
-            if timeSinceSpawnHealthBoosts >= 600:
-                spawnedItems.append(spawnItem("powerup", True))
-                timeSinceSpawnHealthBoosts = 0
-            z = 0
-            for x in range(len(spawnedItems)):
-                if spawnedItems[x][0] == 2 and spawnedItems[x][1] == 'powerup':
-                    z += 1
-            if z >= 10:
-                healthBoostsGone = False
-        timeSinceSpawnHealthBoosts += 1
-    if playerHealth <= 0:
-        gameLost = True
     if gameLost:
         lostGame()
+        return
     if enemiesDefeated:
         wonGame()
+        return
+    if CollectItem: collect_item(spawnedItems, render_data.items_rendered)
+    if not pathfindingThread.is_alive():
+        pathfindingThread = Thread(target=do_pathfinding)
+        pathfindingThread.start()
+    if not inventory_background.collidepoint(pygame.mouse.get_pos()) and ((pygame.mouse.get_pressed()[
+        0] and mouseNotUp == False) or ((joysticks and joysticks[0].get_axis(5) > 0.5) and TriggerNotUp == False)) and playerInventory[itemSelected] is not None:
+
+        if pygame.mouse.get_pressed()[0]:
+            mouseNotUp = True
+            attack(playerInventory[itemSelected].item.type, player)
+        if joysticks and joysticks[0].get_axis(5) > 0.5:
+            TriggerNotUp = True
+            attack(playerInventory[itemSelected].item.type, player, True)
+    timeSinceSword += 1
+    timeSinceGun += 1
+    for x in range(len(timeSinceWand)):
+        timeSinceWand[x] += 1
+    for x in range(len(spawnedEnemies)):
+        if abs(enemiesRendered[x].x - player.x) < 30 and abs(enemiesRendered[x].y - player.y) < 40 and timeSinceEnemyAttack[x] > randomEnemyAttackTime:
+            if spawnedEnemies[x].enemy_type.name == 'Knight':
+                timeSinceEnemyAttack[x] = 0
+                playerHealth -= random.randint(2, 5) * attackMultiplierEnemies
+                criticalHit = random.randint(0, 100)
+                if criticalHit == 99:
+                    playerHealth -= 5 * attackMultiplierEnemies
+        distance = pygame.math.Vector2(abs(enemiesRendered[x].x - player.x), abs(enemiesRendered[x].y - player.y))
+        if distance.length() < 300:
+            if spawnedEnemies[x].enemy_type.name == 'Wizard':
+                attack(WeaponType.WAND, x)
+            if spawnedEnemies[x].enemy_type.name == 'Soldier':
+                attack(WeaponType.GUN, x)
+            randomEnemyAttackTime = random.randint(60, 85)
+    for x in range(len(timeSinceEnemyAttack)):
+        timeSinceEnemyAttack[x] += 1
+    if not healthBoostsGone:
+        noHealthBoosts = True
+        for x in range(len(spawnedItems)):
+            if spawnedItems[x].item.type == PowerupType.HEALTH_BOOST and spawnedItems[x].type == ItemType.POWERUP:
+                noHealthBoosts = False
+        if noHealthBoosts == True:
+            healthBoostsGone = True
+    else:
+        if timeSinceSpawnHealthBoosts >= 600:
+            spawnedItems.append(spawn_item(ItemType.POWERUP, True))
+            timeSinceSpawnHealthBoosts = 0
+        z = 0
+        for x in range(len(spawnedItems)):
+            if spawnedItems[x].item.type == PowerupType.HEALTH_BOOST and spawnedItems[x].type == ItemType.POWERUP:
+                z += 1
+        if z >= 10:
+            healthBoostsGone = False
+    timeSinceSpawnHealthBoosts += 1
+    if playerHealth <= 0:
+        gameLost = True
     manageBullets()
     if not spawnedEnemies:
         enemiesDefeated = True
@@ -836,10 +864,8 @@ def manageBullets():
                 bulletsFired.pop(x)
                 break
 
-
-
-spawnedItems = []
-def spawnItem(type, healthBoost=False):
+spawnedItems: list[Item] = []
+def spawn_item(item_type: ItemType, health_boost: bool = False) -> Item:
     # called when the game is started. spawns a random item.
     # Inputs:
     #   type - string, determines whether it is a weapon or a powerup that is spawned.
@@ -848,7 +874,7 @@ def spawnItem(type, healthBoost=False):
     return_items = None
     location = (random.randint(0,66),random.randint(0,64))
     isDone = False
-    while isDone == False:
+    while not isDone:
         if location[1] == 64:
             if tile_map[location[0]][location[1]] == GRID_COLOR or tile_map[location[0]][location[1]] == WALL_COLOR or tile_map[location[0]][location[1]] == FLOOR_NEXT_COL:
                 location = (random.randint(0, 66), random.randint(0, 64))
@@ -862,52 +888,48 @@ def spawnItem(type, healthBoost=False):
                     location = (random.randint(0, 66), random.randint(0, 64))
                 else:
                     isDone = True
-    if type == "powerup":
-        if healthBoost:
-            return_items = [2, type, location]
-        else:
-            return_items = [random.randint(0, len(powerups)-1), type, location]
-    elif type == "weapon":
-        return_items = [random.choice(list(WeaponType)), type, location]
+    if item_type == ItemType.POWERUP:
+        if health_boost: item = powerups[PowerupType.HEALTH_BOOST]
+        else: item = powerups[random.choice(list(PowerupType))]
+        return_items = Item(item_type, item, location)
+    elif item_type == ItemType.WEAPON:
+        return_items = Item(item_type, weapon_info[random.choice(list(WeaponType))], location)
     return return_items
 
-def collect_item(items, items_rendered):
+def collect_item(items: list[Item], items_rendered):
     global speed, attackMultiplier, playerHealth, timeRemainingSpeedBoost, timeRemainingAttackBoost
     for x, item in reversed(list(enumerate(items))):
-        if abs(player.x - items_rendered[x][0]) < 100 and abs(player.y - items_rendered[x][1]) < 100:
-            if item[1] == "weapon":
-                if not playerInventory[0]:
-                    playerInventory[0] = item
+        if not (abs(player.x - items_rendered[x][0]) < 100 and abs(player.y - items_rendered[x][1]) < 100):
+            continue
+        if item.type == ItemType.WEAPON:
+            for i in range(len(playerInventory)):
+                if not playerInventory[i]:
+                    playerInventory[i] = item
                     items.remove(item)
                     break
-                elif not playerInventory[1]:
-                    playerInventory[1] = item
-                    items.remove(item)
-                    break
-            if item[1] == "powerup" and item[0] == 0:
-                if speed == 400:
-                    speed = 300
-                    timeRemainingSpeedBoost = 1000
-                    items.remove(item)
-                    break
-            if item[1] == "powerup" and item[0] == 1:
-                if attackMultiplier == 1:
-                    attackMultiplier = 2
-                    timeRemainingAttackBoost = 1000
-                    items.remove(item)
-                    break
-            if item[1] == "powerup" and item[0] == 2:
-                if playerHealth == 100:
-                    pass
-                else:
-                    if playerHealth < 80:
-                        playerHealth += 20
-                    else:
-                        playerHealth = 100
-                    items.remove(item)
-                    break
+        if item.type == ItemType.POWERUP and item.item.type == PowerupType.SPEED_BOOST:
+            if speed != 400:
+                continue
+            speed = 300
+            timeRemainingSpeedBoost = 1000
+            items.remove(item)
+            break
+        if item.type == ItemType.POWERUP and item.item.type == PowerupType.DAMAGE_BOOST:
+            if attackMultiplier != 1:
+                continue
+            attackMultiplier = 2
+            timeRemainingAttackBoost = 1000
+            items.remove(item)
+            break
+        if item.type == ItemType.POWERUP and item.item.type == PowerupType.HEALTH_BOOST:
+            if playerHealth == 100:
+                continue
+            if playerHealth < 80: playerHealth += 20
+            else: playerHealth = 100
+            items.remove(item)
+            break
 
-def render_items(items):
+def render_items(items: list[Item]):
     # Is called every frame. Shows the items on screen. If the player is close, it shows text saying the name of the item/powerup and tells the user to press E to pick up.
     # Input:
     #   items - array, the list of items to be rendered. It includes which item it is and where it is
@@ -919,31 +941,23 @@ def render_items(items):
     height = screenHeight / 30
     amount = len(items)
     for x in range(amount-1, -1, -1):
-        current_item = pygame.Rect(((tileWidth) * (items[x][2][0])) + playerPosition[0], ((tileHeight) * (items[x][2][1])) + playerPosition[1] + tileHeight - height + 1, width, height)
+        current_item = pygame.Rect(((tileWidth) * (items[x].location[0])) + playerPosition[0], ((tileHeight) * (items[x].location[1])) + playerPosition[1] + tileHeight - height + 1, width, height)
         itemsRendered[x] = current_item
-        if items[x][1] == "powerup":
-            pygame.draw.rect(screen, powerups[items[x][0]][1], current_item)
-            if items[x][0] == 2:
+        if items[x].type == ItemType.POWERUP:
+            pygame.draw.rect(screen, items[x].item.colour, current_item)
+            if items[x].item == PowerupType.HEALTH_BOOST:
                 enemyNameText = font2.render("+", True, (255, 255, 255))
                 enemyNameTextRect = enemyNameText.get_rect(center=(current_item.center[0], current_item.center[1]))
                 screen.blit(enemyNameText, enemyNameTextRect)
-        elif items[x][1] == "weapon":
-            pygame.draw.rect(screen, weapon_info[items[x][0]].colour, current_item)
+        elif items[x].type == ItemType.WEAPON:
+            pygame.draw.rect(screen, items[x].item.colour, current_item)
         if abs(player.x - current_item[0]) < 100 and abs(player.y - current_item[1]) < 100:
-            if items[x][1] == "powerup":
-                itemText = font2.render(powerups[items[x][0]][0], True, (30, 30, 30))
-                itemTextRect = itemText.get_rect(center=(current_item.center[0],current_item.center[1] - 20))
-                itemText2 = font3.render("Press E to pick up", True, (30,30,30))
-                itemTextRect2 = itemText2.get_rect(center=(current_item.center[0],current_item.center[1] - 35))
-                screen.blit(itemText, itemTextRect)
-                screen.blit(itemText2, itemTextRect2)
-            if items[x][1] == "weapon":
-                itemText = font2.render(weapon_info[items[x][0]].name, True, (30, 30, 30))
-                itemTextRect = itemText.get_rect(center=(current_item.center[0],current_item.center[1] - 20))
-                itemText2 = font3.render("Press E to pick up", True, (30,30,30))
-                itemTextRect2 = itemText2.get_rect(center=(current_item.center[0],current_item.center[1] - 35))
-                screen.blit(itemText, itemTextRect)
-                screen.blit(itemText2, itemTextRect2)
+            itemText = font2.render(items[x].item.name, True, (30, 30, 30))
+            itemTextRect = itemText.get_rect(center=(current_item.center[0],current_item.center[1] - 20))
+            itemText2 = font3.render("Press E to pick up", True, (30,30,30))
+            itemTextRect2 = itemText2.get_rect(center=(current_item.center[0],current_item.center[1] - 35))
+            screen.blit(itemText, itemTextRect)
+            screen.blit(itemText2, itemTextRect2)
     return itemsRendered
 
 def jump():
@@ -1003,7 +1017,7 @@ def spawnEnemies(number):
     return return_enemies
 
 enemiesRendered = []
-def renderEnemies():
+def render_enemies():
     # called every frame. shows the enemies on screen.
     # if the player is nearby, it shows the enemy's health
     # Output:
@@ -1028,49 +1042,49 @@ def renderEnemies():
             screen.blit(enemyNameText, enemyNameTextRect)
 
 itemSelected = 0
-def renderInventory():
+def render_inventory(inventory):
     # shows the inventory at the bottom of the screen. shows which item is currently selected, and checks to see if either inventory slot is clicked
     # If an inventory slot is clicked, if it is the currently selected slot, it drops the item in the slot, if not, it switches to that item
     # Output:
     #   some rects which are displayed and show the inventory and items
-    global itemSelected, mouseNotUp, ButtonNotUp, playerGridPosition, inventoryBackground
-    inventoryBackground = pygame.Rect(screenWidth/2 - 100, screenHeight - 100, 200, 80)
-    inv_slot_0 = pygame.Rect(screenWidth / 2 - 100, screenHeight - 100, 100, 80)
-    inv_slot_1 = pygame.Rect(screenWidth / 2, screenHeight - 100, 100, 80)
-    slot_0_item = pygame.Rect(screenWidth / 2 - 50 - 15, screenHeight - 60 - 12.5, 30, 25)
-    slot_1_item = pygame.Rect(screenWidth / 2 + 50 - 15, screenHeight - 60 - 12.5, 30, 25)
-    draw_rect_alpha(screen, (0,0,0,128), inventoryBackground)
-    inv_slots = [inv_slot_0, inv_slot_1]
-    controller_inv_button = [4, 5]
+    global itemSelected, mouseNotUp, ButtonNotUp, playerGridPosition, inventory_background
 
-    draw_rect_alpha(screen, (200, 200, 200, 128), inv_slots[itemSelected])
+    inventory_background = pygame.Rect((screenWidth / 2) - (50 * len(inventory)), screenHeight - 100, 100 * len(inventory), 80)
+    draw_rect_alpha(screen, (0,0,0,128), inventory_background)
+
+    rendered_inv = []
+    rendered_inv_items: dict[int, pygame.Rect] = {}
+    for n in range(len(inventory)):
+        rendered_inv.append(pygame.Rect((screenWidth / 2) - (50  * len(inventory) - (100 * n)), screenHeight - 100, 100, 80))
+        if n == itemSelected: draw_rect_alpha(screen, (200, 200, 200, 128), rendered_inv[n])
+        if inventory[n]:
+            rendered_inv_items[n] = (pygame.Rect(screenWidth / 2 - (50  * len(inventory) - (100 * n)) + 35, screenHeight - 60 - 12.5, 30, 25))
+            pygame.draw.rect(screen, inventory[n].item.colour, rendered_inv_items[n])
 
     inventory_slot_pressed: list[bool] = [
-        (pygame.mouse.get_pressed()[0] and inv_slots[n].collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False) or
-        ((joysticks != [] and joysticks[0].get_button(controller_inv_button[n])) and ButtonNotUp == False)
-        for n in range(len(inv_slots))
+        (pygame.mouse.get_pressed()[0] and rendered_inv[n].collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False)
+        for n in range(len(rendered_inv))
     ]
 
+    controller_drop_pressed: bool = joysticks != [] and joysticks[0].get_button(controller_inv_button[2])
+
     # drop item
-    if inventory_slot_pressed[itemSelected] and playerInventory[itemSelected] != []:
-        spawnedItems.append([playerInventory[itemSelected][0], playerInventory[itemSelected][1], (playerGridPosition[0], playerGridPosition[1])])
-        playerInventory[itemSelected] = []
+    if (inventory_slot_pressed[itemSelected] or controller_drop_pressed) and inventory[itemSelected] is not None:
+        spawnedItems.append(Item(inventory[itemSelected].type, inventory[itemSelected].item, (playerGridPosition[0], playerGridPosition[1])))
+        inventory[itemSelected] = None
         if pygame.mouse.get_pressed()[0]:
             mouseNotUp = True
-        if (joysticks and joysticks[0].get_button(controller_inv_button[1 - itemSelected])):
+        if joysticks and joysticks[0].get_button(controller_inv_button[2]):
             ButtonNotUp = True
 
     # switch inventory slots
-    if inventory_slot_pressed[1-itemSelected]:
-        itemSelected = 1-itemSelected
-        if pygame.mouse.get_pressed()[0]:
+    for x in range(len(rendered_inv)):
+        if inventory_slot_pressed[x]:
+            itemSelected = x
             mouseNotUp = True
-        if joysticks and joysticks[0].get_button(controller_inv_button[itemSelected]):
-            ButtonNotUp = True
 
-    for i in range(len(inv_slots)):
-        if playerInventory[i]:
-            pygame.draw.rect(screen, weapon_info[playerInventory[i][0]].colour, slot_0_item)
+    if joysticks and joysticks[0].get_button(controller_inv_button[0]): itemSelected -= 1
+    if joysticks and joysticks[0].get_button(controller_inv_button[1]): itemSelected += 1
 
 
 def saveFile():
