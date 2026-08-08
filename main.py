@@ -117,10 +117,10 @@ class GameState:
 
 class Entity(ABC):
     health: float
-    position: list[float]
+    position: pygame.Vector2
     rect: pygame.Rect
 
-    def __init__(self, health: float, position: list[float], rect: pygame.Rect):
+    def __init__(self, health: float, position: pygame.Vector2, rect: pygame.Rect):
         self.health = health
         self.position = position
         self.rect = rect
@@ -128,7 +128,7 @@ class Entity(ABC):
 
 @dataclasses.dataclass
 class Item(ABC):
-    location: tuple[int, int]
+    location: pygame.Vector2
     name: str
     colour: tuple[int, int, int]
 
@@ -138,7 +138,7 @@ class Bullet(Entity):
     damage: float
     shot_by: Entity
 
-    def __init__(self, position: list[float], direction: float, damage: float, shot_by: Entity):
+    def __init__(self, position: pygame.Vector2, direction: float, damage: float, shot_by: Entity):
         super().__init__(0.1, position, pygame.Rect(0, 0, 10, 10))
         self.direction = direction
         self.damage = damage
@@ -151,7 +151,7 @@ class WandMagicThing(Entity):
     target: Entity
     damage: float
 
-    def __init__(self, position: list[float], age: int, target: Entity, damage: float):
+    def __init__(self, position: pygame.Vector2, age: int, target: Entity, damage: float):
         super().__init__(0.1, position, pygame.Rect(((tileWidth) * (position[0])), ((tileHeight) * (position[1])),
                                                     target.rect.width / 4, target.rect.width / 4))
         self.age = age
@@ -164,7 +164,7 @@ class Weapon(Item, ABC):
     time_since_attack: int
     cooldown: int
 
-    def __init__(self, location: tuple[int, int], name: str, colour: tuple[int, int, int], strength: float = 1.0):
+    def __init__(self, location: pygame.Vector2, name: str, colour: tuple[int, int, int], strength: float = 1.0):
         self.name = name
         self.colour = colour
         self.cooldown = 10
@@ -175,7 +175,7 @@ class Weapon(Item, ABC):
 
 class Sword(Weapon):
 
-    def __init__(self, location: tuple[int, int], strength: float = 1.0):
+    def __init__(self, location: pygame.Vector2, strength: float = 1.0):
         super().__init__(location, "Sword", (200, 200, 0), strength)
 
     def attack(self, target: Entity, attack_multiplier: float = 1) -> None:
@@ -190,10 +190,10 @@ class Sword(Weapon):
 
 class Gun(Weapon):
 
-    def __init__(self, location: tuple[int, int], strength: float = 1.0):
+    def __init__(self, location: pygame.Vector2, strength: float = 1.0):
         super().__init__(location, "Gun", (0, 200, 0), strength)
 
-    def shoot(self, given_state: GameState, shot_by: Entity, location: list[float], direction: float,
+    def shoot(self, given_state: GameState, shot_by: Entity, location: pygame.Vector2, direction: float,
               attack_multiplier: float = 1) -> None:
         if self.time_since_attack <= self.cooldown:
             return
@@ -206,10 +206,10 @@ class Gun(Weapon):
 
 class Wand(Weapon):
 
-    def __init__(self, location: tuple[int, int], strength: float = 1.0):
+    def __init__(self, location: pygame.Vector2, strength: float = 1.0):
         super().__init__(location, "Wand", (100, 255, 255), strength)
 
-    def fire(self, given_state: GameState, target: Entity, location: list[float], attack_multiplier: float = 1) -> None:
+    def fire(self, given_state: GameState, target: Entity, location: pygame.Vector2, attack_multiplier: float = 1) -> None:
         if self.time_since_attack <= self.cooldown:
             return
 
@@ -228,7 +228,9 @@ class Enemy(Entity, ABC):
     colour: tuple[int, int, int]
     weapon: Weapon
 
-    def __init__(self, weapon: Weapon, health: float, position: list[float]):
+    def __init__(self, health: int, location: pygame.Vector2): ...
+
+    def _init_inner(self, weapon: Weapon, health: float, position: pygame.Vector2) -> None:
         super().__init__(health, position, pygame.Rect((tileWidth * (position[0])),
                                            (tileHeight * (position[1])) + tileHeight - (
                                                 screenHeight / 30) + 1,
@@ -256,8 +258,8 @@ class Enemy(Entity, ABC):
 
 class Knight(Enemy):
 
-    def __init__(self, health: float, position: list[float]):
-        super().__init__(new_weapon(position, Sword), health, position)
+    def __init__(self, health: float, position: pygame.Vector2):
+        self._init_inner(new_weapon(position, Sword), health, position)
         self.name = "Knight"
         self.initial = "K"
         self.colour = (200, 75, 0)
@@ -265,8 +267,8 @@ class Knight(Enemy):
 
 class Wizard(Enemy):
 
-    def __init__(self, health: float, position: list[float]):
-        super().__init__(new_weapon(position, Wand), health, position)
+    def __init__(self, health: float, position: pygame.Vector2):
+        self._init_inner(new_weapon(position, Wand), health, position)
         self.name = "Wizard"
         self.initial = "W"
         self.colour = (200, 0, 75)
@@ -274,8 +276,8 @@ class Wizard(Enemy):
 
 class Soldier(Enemy):
 
-    def __init__(self, health: float, position: list[float]):
-        super().__init__(new_weapon(position, Gun), health, position)
+    def __init__(self, health: float, position: pygame.Vector2):
+        self._init_inner(new_weapon(position, Gun), health, position)
         self.name = "Soldier"
         self.initial = "S"
         self.colour = (0, 0, 100)
@@ -305,7 +307,7 @@ powerups: dict[PowerupType, tuple[str, tuple[int, int, int]]] = {
 class Player(Entity):
     inventory: list[Item | None]
 
-    def __init__(self, health: float, position: list[float], rect: pygame.Rect, inventory: list[Item | None]):
+    def __init__(self, health: float, position: pygame.Vector2, rect: pygame.Rect, inventory: list[Item | None]):
         super().__init__(health, position, rect)
         self.inventory = inventory
 
@@ -418,31 +420,31 @@ def createFile():
     gameSaves = os.listdir('gamesaves')
 
 
-game_state = None
+game_state_global = None
 
 
-def loadFile(file):
+def loadFile(file: str) -> None:
     # loads the chosen game file. This function closes the main menu and starts the game
     # Input:
     #   file - string, determines which file is loaded
     # Output:
     #   Starts the game
 
-    global inGame, loadMenu, currentFile, tile_map, fileLine, game_state
+    global inGame, loadMenu, currentFile, tile_map, fileLine, game_state_global
     inGame = True
     loadMenu = False
     currentFile = file
     enemies: list[Enemy] = []
     bullets_fired: list[Bullet] = []
     wand_magic_fired: list[WandMagicThing] = []
-    player = Player(100, [0, 0], pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
+    player = Player(100, pygame.Vector2(0, 0), pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
                                              screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
                                              (screenHeight / 2) / 20), [None, None])
-    game_state = GameState(player, enemies, bullets_fired, wand_magic_fired)
+    game_state_global = GameState(player, enemies, bullets_fired, wand_magic_fired)
     with open(f"gamesaves/{file}", "r") as f:
         fileLine = [line.strip() for line in f]
     if fileLine[1] == "firstPlaythroughFalse":
-        player.position = [float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1])]
+        player.position = pygame.Vector2(float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1]))
         tile_map = []
         mapTemp = fileLine[3].split("  ")
         for x in range(len(mapTemp)):
@@ -457,7 +459,7 @@ def loadFile(file):
                     tile_map[y][x] = WALL_COLOR
                 elif tile_map[y][x] == "GRID_COLOR":
                     tile_map[y][x] = GRID_COLOR
-    load_save(file)
+    load_save(file, game_state_global)
 
 
 def mainMenu(menu):
@@ -517,11 +519,11 @@ def mainMenu(menu):
     screen.blit(menuNameText, menuNameTextRect)
 
 
-def get_grid_pos(position: list[float], return_int: bool = True) -> list[int] | list[float]:
+def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> list[int] | list[float]:
     if return_int:
-        return [int((((screenWidth / 2) - position[0]) / tileWidth) // 1),
-                int((((screenHeight / 2) - position[1]) / tileHeight) // 1)]
-    return [(((screenWidth / 2) - position[0]) / tileWidth), (((screenHeight / 2) - position[1]) / tileHeight)]
+        return [int((((screenWidth / 2) - position.x) / tileWidth) // 1),
+                int((((screenHeight / 2) - position.y) / tileHeight) // 1)]
+    return [(((screenWidth / 2) - position.x) / tileWidth), (((screenHeight / 2) - position.y) / tileHeight)]
 
 
 mapGenerated = False
@@ -600,13 +602,13 @@ attackMultiplierEnemies = 1
 enemiesDefeated = False
 
 
-def generate_map(preset_maps, num_presets_x, num_presets_y):
+def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y: int) -> list[list[tuple[int, int, int]]]:
     preset_len_x = len(preset_maps[0])
     preset_len_y = len(preset_maps[0][0])
 
     chosen_presets = [[random.choice(preset_maps) for _ in range(num_presets_x)] for _ in range(num_presets_y)]
 
-    world_map = []
+    world_map: list[list[tuple[int, int, int]]] = []
 
     colour_map = {
         "-": WALL_COLOR,
@@ -623,7 +625,7 @@ def generate_map(preset_maps, num_presets_x, num_presets_y):
     return world_map
 
 
-def load_save(file):
+def load_save(file: str, game_state: GameState) -> None:
     global enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, fileLine, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, tile_map, tileRect, tile, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
     game_state.player.inventory = [None, None]
     with open(f"gamesaves/{file}", "r") as f:
@@ -739,7 +741,7 @@ def game_frame(game_state: GameState) -> None:  # TODO: Split into multiple func
     if enemiesDefeated:
         wonGame()
         return
-    if CollectItem: collect_item(spawnedItems, render_data.items_rendered)
+    if CollectItem: collect_item(game_state, spawnedItems, render_data.items_rendered)
     if not pathfindingThread.is_alive():
         pathfindingThread = Thread(target=do_pathfinding, args=[game_state])
         pathfindingThread.start()
@@ -1006,36 +1008,17 @@ def spawn_item(item_type: type[Item], health_boost: bool = False) -> Item:
     #   type - string, determines whether it is a weapon or a powerup that is spawned.
     # Outputs:
     #   appends a weapon/powerup to the list of weapons/powerups spawned in a random location on the floor
-    return_items: Item | None = None
-    location = (random.randint(0, 66), random.randint(0, 64))
-    isDone = False
-    while not isDone:
-        if location[1] == 64:
-            if tile_map[location[0]][location[1]] == GRID_COLOR or tile_map[location[0]][location[1]] == WALL_COLOR or \
-                    tile_map[location[0]][location[1]] == FLOOR_NEXT_COL:
-                location = (random.randint(0, 66), random.randint(0, 64))
-            else:
-                isDone = True
-        else:
-            if tile_map[location[0]][location[1] + 1] == FLOOR_COLOR:
-                location = (random.randint(0, 66), random.randint(0, 64))
-            else:
-                if tile_map[location[0]][location[1]] == GRID_COLOR or tile_map[location[0]][
-                    location[1]] == WALL_COLOR or tile_map[location[0]][location[1]] == FLOOR_NEXT_COL:
-                    location = (random.randint(0, 66), random.randint(0, 64))
-                else:
-                    isDone = True
+    location = onGround[random.randint(0, len(onGround) - 1)]
     if item_type == Powerup:
         powerup_type = PowerupType.HEALTH_BOOST if health_boost else random.choice(list(PowerupType))
         item = powerups[powerup_type]
-        return_items = Powerup(location, item[0], item[1], powerup_type)
-    elif item_type == Weapon:
-        weapon_type = random.choice(weapon_types)
-        return_items = weapon_type(location)
-    return return_items
+        return Powerup(location, item[0], item[1], powerup_type)
+    else:
+        weapon_type: type[Weapon] = random.choice(weapon_types)
+        return weapon_type(location)
 
 
-def collect_item(items: list[Item], items_rendered):
+def collect_item(game_state: GameState, items: list[Item], items_rendered: dict[int, pygame.Rect]) -> None:
     global speed, attackMultiplier, timeRemainingSpeedBoost, timeRemainingAttackBoost
     for x, item in reversed(list(enumerate(items))):
         if not (abs(game_state.player.rect.x - items_rendered[x][0]) < 100 and abs(
@@ -1117,7 +1100,7 @@ def jump():
         move = pygame.math.Vector2(0, -((screenWidth / 800) * (0.1 * jumpCount)) - gravity - (screenWidth / 800))
     else:
         move = pygame.math.Vector2(0, -(screenWidth / 600) - gravity - (screenWidth / 800))
-    nextPlayer_y = game_state.player.rect.move(0, move.y)
+    nextPlayer_y = game_state_global.player.rect.move(0, move.y)
     for x, tileRectRow in enumerate(tileRect):
         for y, tileRectRowColumn in enumerate(tileRectRow):
             if nextPlayer_y.colliderect(tileRect[x][y]) and (
@@ -1129,24 +1112,24 @@ def jump():
                     move.y = 0
                 break
 
-    if game_state.player.position[1] <= -1776:
+    if game_state_global.player.position[1] <= -1776:
         if move.y > 0:
             move.y = 0
-        game_state.player.position[1] = -1776
+        game_state_global.player.position[1] = -1776
 
-    if game_state.player.position[1] >= 315.2:
+    if game_state_global.player.position[1] >= 315.2:
         if move.y < 0:
             move.y = 0
-        game_state.player.position[1] = 315.2
+        game_state_global.player.position[1] = 315.2
 
-    game_state.player.position[1] -= move.y
+    game_state_global.player.position[1] -= move.y
     jumpCount += 1
 
 
 jumping = False
 
 
-def new_weapon(location: tuple[int, int], weapon_type: type[Weapon] | None = None) -> Weapon:
+def new_weapon(location: pygame.Vector2, weapon_type: type[Weapon] | None = None) -> Weapon:
     if weapon_type is None: weapon_type = random.choice(weapon_types)
     return weapon_type(location)
 
@@ -1207,8 +1190,8 @@ def render_inventory(game_state: GameState) -> pygame.Rect:
     current_item = game_state.player.inventory[itemSelected]
     current_item_pressed = inventory_slot_pressed[itemSelected]
     if (current_item_pressed or controller_drop_pressed) and current_item is not None:
-        current_item.location = (get_grid_pos(game_state.player.position)[0],
-                                 get_grid_pos(game_state.player.position)[1])
+        current_item.location = pygame.Vector2(get_grid_pos(game_state.player.position)[0],
+                                               get_grid_pos(game_state.player.position)[1])
         spawnedItems.append(current_item)
         game_state.player.inventory[itemSelected] = None
         if pygame.mouse.get_pressed()[0]:
@@ -1236,7 +1219,7 @@ def saveFile():
     # Output:
     # writes the player location, the map details, and the fact that the file has been played to the file.
     global fileLine
-    fileLine[2] = str(game_state.player.position[0]) + " " + str(game_state.player.position[1])
+    fileLine[2] = str(game_state_global.player.position[0]) + " " + str(game_state_global.player.position[1])
     fileLine[3] = ""
     for y in range(len(tile_map)):
         for x in range(len(tile_map[y])):
@@ -1386,7 +1369,7 @@ while True:
     keys = pygame.key.get_pressed()
 
     if inGame:
-        game_frame(game_state)
+        game_frame(game_state_global)
 
         key = pygame.key.get_pressed()
 
@@ -1426,7 +1409,7 @@ while True:
             if move.length_squared() > 0:
                 move.scale_to_length(screenWidth / speed)
 
-                nextPlayer_x = game_state.player.rect.move(move.x, 0)
+                nextPlayer_x = game_state_global.player.rect.move(move.x, 0)
                 for x, tileRectRow in enumerate(tileRect):
                     for y, tileRectRowColumn in enumerate(tileRectRow):
                         if nextPlayer_x.colliderect(tileRect[x][y]) and (
@@ -1438,7 +1421,7 @@ while True:
                                 move.x = 0
                             break
 
-                nextPlayer_y = game_state.player.rect.move(0, move.y)
+                nextPlayer_y = game_state_global.player.rect.move(0, move.y)
                 for x, tileRectRow in enumerate(tileRect):
                     for y, tileRectRowColumn in enumerate(tileRectRow):
                         if nextPlayer_y.colliderect(tileRect[x][y]) and (
@@ -1450,26 +1433,26 @@ while True:
                                 move.y = 0
                             break
 
-                if game_state.player.position[0] <= -3268.8:
+                if game_state_global.player.position[0] <= -3268.8:
                     if move.x > 0:
                         move.x = 0
-                    game_state.player.position[0] = -3268.8
-                if game_state.player.position[0] >= 561:
+                    game_state_global.player.position[0] = -3268.8
+                if game_state_global.player.position[0] >= 561:
                     if move.x < 0:
                         move.x = 0
-                    game_state.player.position[0] = 561
-                if game_state.player.position[1] <= -1776:
+                    game_state_global.player.position[0] = 561
+                if game_state_global.player.position[1] <= -1776:
                     if move.y > 0:
                         move.y = 0
-                    game_state.player.position[1] = -1776
-                if game_state.player.position[1] >= 315.2:
+                    game_state_global.player.position[1] = -1776
+                if game_state_global.player.position[1] >= 315.2:
                     if move.y < 0:
                         move.y = 0
-                    game_state.player.position[1] = 315.2
+                    game_state_global.player.position[1] = 315.2
 
-                game_state.player.position[0] -= move.x
-                game_state.player.position[1] -= move.y
-                fileLine[2] = game_state.player.position
+                game_state_global.player.position[0] -= move.x
+                game_state_global.player.position[1] -= move.y
+                fileLine[2] = game_state_global.player.position
 
             if timeRemainingSpeedBoost > 0:
                 if timeRemainingSpeedBoost == 1:
