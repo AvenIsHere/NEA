@@ -7,6 +7,7 @@ import sys
 from abc import ABC
 from enum import Enum
 from threading import Thread
+from typing import ClassVar
 
 import pathfinding  # type: ignore[import-untyped]
 import pygame
@@ -227,15 +228,14 @@ class Enemy(Entity, ABC):
     initial: str
     colour: tuple[int, int, int]
     weapon: Weapon
+    weapon_type: ClassVar[type[Weapon]]
 
-    def __init__(self, health: int, location: pygame.Vector2): ...
-
-    def _init_inner(self, weapon: Weapon, health: float, position: pygame.Vector2) -> None:
-        super().__init__(health, position, pygame.Rect((tileWidth * (position[0])),
-                                           (tileHeight * (position[1])) + tileHeight - (
-                                                screenHeight / 30) + 1,
-                                           screenWidth / 30, screenHeight / 30))
-        self.weapon = weapon
+    def __init__(self, health: int, location: pygame.Vector2):
+        super().__init__(health, location, pygame.Rect((tileWidth * (location[0])),
+                                                       (tileHeight * (location[1])) + tileHeight - (
+                                                               screenHeight / 30) + 1,
+                                                       screenWidth / 30, screenHeight / 30))
+        self.weapon = new_weapon(location, self.weapon_type)
 
     def render(self, game_state: GameState) -> None:
         self.rect = pygame.Rect(
@@ -257,30 +257,24 @@ class Enemy(Entity, ABC):
 
 
 class Knight(Enemy):
-
-    def __init__(self, health: float, position: pygame.Vector2):
-        self._init_inner(new_weapon(position, Sword), health, position)
-        self.name = "Knight"
-        self.initial = "K"
-        self.colour = (200, 75, 0)
+    weapon_type = Sword
+    name = "Knight"
+    initial = "K"
+    colour = (200, 75, 0)
 
 
 class Wizard(Enemy):
-
-    def __init__(self, health: float, position: pygame.Vector2):
-        self._init_inner(new_weapon(position, Wand), health, position)
-        self.name = "Wizard"
-        self.initial = "W"
-        self.colour = (200, 0, 75)
+    weapon_type = Wand
+    name = "Wizard"
+    initial = "W"
+    colour = (200, 0, 75)
 
 
 class Soldier(Enemy):
-
-    def __init__(self, health: float, position: pygame.Vector2):
-        self._init_inner(new_weapon(position, Gun), health, position)
-        self.name = "Soldier"
-        self.initial = "S"
-        self.colour = (0, 0, 100)
+    weapon_type = Gun
+    name = "Soldier"
+    initial = "S"
+    colour = (0, 0, 100)
 
 
 enemy_types: list[type[Enemy]] = [Knight, Soldier, Wizard]
@@ -519,11 +513,11 @@ def mainMenu(menu):
     screen.blit(menuNameText, menuNameTextRect)
 
 
-def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> list[int] | list[float]:
+def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Vector2:
     if return_int:
-        return [int((((screenWidth / 2) - position.x) / tileWidth) // 1),
-                int((((screenHeight / 2) - position.y) / tileHeight) // 1)]
-    return [(((screenWidth / 2) - position.x) / tileWidth), (((screenHeight / 2) - position.y) / tileHeight)]
+        return pygame.Vector2(int((((screenWidth / 2) - position.x) / tileWidth) // 1),
+                int((((screenHeight / 2) - position.y) / tileHeight) // 1))
+    return pygame.Vector2((((screenWidth / 2) - position.x) / tileWidth), (((screenHeight / 2) - position.y) / tileHeight))
 
 
 mapGenerated = False
@@ -547,8 +541,8 @@ def do_pathfinding(game_state: GameState):
                     get_grid_pos(game_state.player.position)[1] - int(game_state.enemies[x].position[1] // 1)) <= 21:
                 start = grid.node(int(game_state.enemies[x].position[0] // 1),
                                   int(game_state.enemies[x].position[1] // 1))
-                end = grid.node(get_grid_pos(game_state.player.position)[0],
-                                get_grid_pos(game_state.player.position)[1])
+                end = grid.node(int(get_grid_pos(game_state.player.position)[0]),
+                                int(get_grid_pos(game_state.player.position)[1]))
                 finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
                 path, runs = finder.find_path(start, end, grid)
                 pathGrid = grid.grid_str(path=path, start=start, end=end).split('\n')
@@ -648,7 +642,7 @@ def load_save(file: str, game_state: GameState) -> None:
         difficulty = 4
         attackMultiplierEnemies = 1.25
     if fileLine[1] == "firstplaythroughTrue":
-        game_state.player.position = [90, -10]
+        game_state.player.position = pygame.Vector2(90, -10)
         fileLine[2] = game_state.player.position
         tile_map = generate_map(PresetMaps, 5, 5)
         fileLine[1] = 'firstPlaythroughFalse'
@@ -1337,7 +1331,7 @@ while True:
                         jumpCount = 0
 
                 if event.key == pygame.K_h:
-                    player.position = [screenWidth, 0]
+                    player.position = pygame.Vector2(screenWidth, 0)
                 if event.key == pygame.K_e:
                     CollectItem = True
             # if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
