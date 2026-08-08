@@ -25,19 +25,9 @@ pygame.display.set_caption('NEA')
 font = pygame.font.Font(None, 32)
 font2 = pygame.font.Font(None, 24)
 font3 = pygame.font.Font(None, 12)
-isFullscreen = False
-displayAudioError = False
-audioMessagePressed = False
-try:
-    pygame.mixer.init()  # initialising audio
-except:
-    displayAudioError = True
-    audioMessagePressed = False
 
 loadMenu = True
-menu = 'main'
 ButtonsListOffset = 0
-volume = 100
 mouseNotUp = False
 ButtonNotUp = False
 TriggerNotUp = False
@@ -109,6 +99,13 @@ PresetMaps = [
      '-------     ---']
 ]
 
+class Menu(Enum):
+    MAIN = 0
+    NEW = 1
+    PLAY = 2
+    SETTINGS = 3
+
+menu: Menu = Menu.MAIN
 
 @dataclasses.dataclass
 class GameState:
@@ -238,7 +235,7 @@ class Enemy(Entity, ABC):
                                            screenWidth / 30, screenHeight / 30))
         self.weapon = weapon
 
-    def render(self, game_state: GameState):
+    def render(self, game_state: GameState) -> None:
         self.rect = pygame.Rect(
             (tileWidth * (self.position[0])) + game_state.player.position[0],
             (tileHeight * (self.position[1])) + game_state.player.position[1] + tileHeight - (
@@ -316,7 +313,7 @@ class Player(Entity):
 inGame = False
 
 
-def button(text, position, size, colour, action=None, *args):
+def button(text, position, size, colour, action=None, *args) -> None:
     # draws a button on screen with optional function
     # input:
     #   text - string, determines what text will appear on the button
@@ -340,8 +337,7 @@ def button(text, position, size, colour, action=None, *args):
         action(*args)  # does the action associated with pressing the button
         mouseNotUp = True
 
-
-def menuEquals(menu_set):
+def menuEquals(menu_set: Menu) -> None:
     # Changes current menu to the menu in the input menu_set.
     # This function exists due to the way the button function works. Buttons can only call a function, so a function must be made to change a variable.
     # input:
@@ -353,24 +349,16 @@ def menuEquals(menu_set):
     global typedText
     global ButtonsListOffset
     menu = menu_set
-    if menu == 'new':
+    if menu == Menu.NEW:
         difficulty = 'Easy'
         typedText = ''
-    if menu == 'play':
+    if menu == Menu.PLAY:
         if os.path.isdir('gamesaves'):
             global gameSaves
             gameSaves = os.listdir('gamesaves')
         else:
             os.mkdir('gamesaves')
     ButtonsListOffset = 0
-
-
-def changeVolume():
-    # changes the volume, this function is called when the volume button is pressed.
-    # like the function above, this also exists due to the way the button function works.
-    global volume
-    volume = (volume + 10) % 100
-    pygame.mixer.music.set_volume(volume / 100)
 
 
 def drawTextBox(text, position, colour, borderColour, borderSize, typedText):
@@ -480,41 +468,35 @@ def mainMenu(menu):
     # Output:
     #   displays the current menu on the screen
     global menuNameTextRect
-    global volume
     global buttonsList
-    if menu not in ['main', 'play', 'settings', 'new']:
-        raise ValueError('invalid menu')
     menuNameMap = {
-        "main": "Game Name",
-        "play": "Game Name",
-        "settings": "Settings",
-        "new": "New Game",
+        Menu.MAIN: "Game Name",
+        Menu.PLAY: "Game Name",
+        Menu.SETTINGS: "Settings",
+        Menu.NEW: "New Game",
     }
     menuNameText = font.render(menuNameMap[menu], True, (255, 255, 255))
     menuNameTextRect = menuNameText.get_rect(center=(screenWidth / 2, screenHeight / 6))
-    if menu == 'main':
-        buttonsList = [['Play', menuEquals, 'play'], ['Settings', menuEquals, 'settings'], ['Quit', pygame.quit]]
-    elif menu == 'settings':
-        if not displayAudioError:
-            buttonsList = [[f'Volume: {volume}%', changeVolume]]
-        else:
-            buttonsList = []
+    if menu == Menu.MAIN:
+        buttonsList = [['Play', menuEquals, Menu.PLAY], ['Settings', menuEquals, Menu.SETTINGS], ['Quit', pygame.quit]]
+    elif menu == Menu.SETTINGS:
+        buttonsList = []
         button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100),
-               menuEquals, 'main')
-    elif menu == 'play':
-        buttonsList = [['New Game', menuEquals, 'new']]
+               menuEquals, Menu.MAIN)
+    elif menu == Menu.PLAY:
+        buttonsList = [['New Game', menuEquals, Menu.NEW]]
         for savefile in gameSaves:
             buttonsList.append([savefile[:len(savefile) - 4], loadFile, savefile])
         if len(buttonsList) < 4:
             button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100),
-                   menuEquals, 'main')
+                   menuEquals, Menu.MAIN)
         else:
-            buttonsList.append(['Back', menuEquals, 'main'])
-    elif menu == 'new':
+            buttonsList.append(['Back', menuEquals, Menu.MAIN])
+    elif menu == Menu.NEW:
         drawTextBox(f'Enter a name for your new game', (menuNameTextRect.centerx, menuNameTextRect.centery + 50),
                     (100, 100, 100), (0, 0, 0), 2, typedText)
         buttonsList = [None, [f'Difficulty: {difficulty}', setDifficulty], ['Start', createFile],
-                       ['Back', menuEquals, 'play']]
+                       ['Back', menuEquals, Menu.PLAY]]
     for i in range(len(buttonsList)):
         if buttonsList[i] == None:
             pass
@@ -1182,28 +1164,9 @@ def spawnEnemies(number: int) -> list[Enemy]:
     return return_enemies
 
 
-def render_enemies(given_state: GameState):
-    # called every frame. shows the enemies on screen.
-    # if the player is nearby, it shows the enemy's health
-    # Output:
-    #   a bunch of pygame.Rects that are showed on the screen
-    for x in range(len(given_state.enemies)):
-        given_state.enemies[x].rect = pygame.Rect(
-            ((tileWidth) * (given_state.enemies[x].position[0])) + given_state.player.position[0],
-            ((tileHeight) * (given_state.enemies[x].position[1])) + given_state.player.position[1] + tileHeight - (
-                        screenHeight / 30) + 1,
-            screenWidth / 30, screenHeight / 30)
-        pygame.draw.rect(screen, given_state.enemies[x].colour, given_state.enemies[x].rect)
-        if abs(given_state.enemies[x].rect.x - given_state.player.rect.x) < 100 and abs(
-                given_state.enemies[x].rect.y - given_state.player.rect.y) < 100:
-            enemyHealthText = font2.render(str(given_state.enemies[x].health), True, (30, 30, 30))
-            enemyHealthTextRect = enemyHealthText.get_rect(
-                center=(given_state.enemies[x].rect.center[0], given_state.enemies[x].rect.center[1] - 20))
-            screen.blit(enemyHealthText, enemyHealthTextRect)
-        enemyNameText = font2.render(given_state.enemies[x].initial, True, (30, 30, 30))
-        enemyNameTextRect = enemyNameText.get_rect(
-            center=(given_state.enemies[x].rect.center[0], given_state.enemies[x].rect.center[1]))
-        screen.blit(enemyNameText, enemyNameTextRect)
+def render_enemies(given_state: GameState) -> None:
+    for enemy in given_state.enemies:
+        enemy.render(given_state)
 
 
 itemSelected = 0
@@ -1519,13 +1482,6 @@ while True:
 
     if CollectItem:
         CollectItem = False
-
-    if displayAudioError == True and audioMessagePressed == False:
-        audioErrorText = font.render("Audio Error. Press to dismiss.", True, (255, 0, 0))
-        audioErrorTextRect = audioErrorText.get_rect(center=(screenWidth / 2, screenHeight - 30))
-        screen.blit(audioErrorText, audioErrorTextRect)
-        if pygame.mouse.get_pressed()[0] and audioErrorTextRect.collidepoint(pygame.mouse.get_pos()):
-            audioMessagePressed = True
 
     clock.tick(60)
 
