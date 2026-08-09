@@ -1,5 +1,6 @@
 # importing different libraries
 import dataclasses
+import json
 import math
 import os
 import random
@@ -8,6 +9,9 @@ from abc import ABC
 from enum import Enum
 from threading import Thread
 from typing import ClassVar
+
+import pydantic
+from pydantic import BaseModel
 
 import pathfinding  # type: ignore[import-untyped]
 import pygame
@@ -162,22 +166,17 @@ class WandMagicThing(Entity):
 
 class Weapon(Item, ABC):
     strength: float
-    time_since_attack: int
-    cooldown: int
+    time_since_attack: int = 0
+    cooldown: int = 10
 
-    def __init__(self, location: pygame.Vector2, name: str, colour: tuple[int, int, int], strength: float = 1.0):
-        self.name = name
-        self.colour = colour
-        self.cooldown = 10
-        self.time_since_attack = 0
+    def __init__(self, location: pygame.Vector2, strength: float = 1.0):
         self.location = location
         self.strength = strength
 
 
 class Sword(Weapon):
-
-    def __init__(self, location: pygame.Vector2, strength: float = 1.0):
-        super().__init__(location, "Sword", (200, 200, 0), strength)
+    name = "Sword"
+    colour = (200, 200, 0)
 
     def attack(self, target: Entity, attack_multiplier: float = 1) -> None:
         if self.time_since_attack <= self.cooldown:
@@ -190,9 +189,8 @@ class Sword(Weapon):
 
 
 class Gun(Weapon):
-
-    def __init__(self, location: pygame.Vector2, strength: float = 1.0):
-        super().__init__(location, "Gun", (0, 200, 0), strength)
+    name = "Gun"
+    colour = (0, 200, 0)
 
     def shoot(self, given_state: GameState, shot_by: Entity, location: pygame.Vector2, direction: float,
               attack_multiplier: float = 1) -> None:
@@ -206,9 +204,8 @@ class Gun(Weapon):
 
 
 class Wand(Weapon):
-
-    def __init__(self, location: pygame.Vector2, strength: float = 1.0):
-        super().__init__(location, "Wand", (100, 255, 255), strength)
+    name = "Wand"
+    colour = (100, 255, 255)
 
     def fire(self, given_state: GameState, target: Entity, location: pygame.Vector2, attack_multiplier: float = 1) -> None:
         if self.time_since_attack <= self.cooldown:
@@ -396,6 +393,18 @@ def setDifficulty():
     difficulty = difficulties.get(difficulty, 'Easy')
 
 
+class SaveFile(BaseModel):
+    difficulty: int | None
+    player_location: tuple[float, float] | None
+    map: list[list[tuple[int, int, int]]] | None
+
+difficulty_num = {
+    "Easy": 1,
+    "Normal": 2,
+    "Difficult": 3,
+    "Very Difficult": 4
+}
+
 def createFile():
     # creates a game file
     # Input:
@@ -406,57 +415,51 @@ def createFile():
     global fileName
     global difficulty
     global gameSaves
-    file = open(f'gamesaves/{typedText}.txt', 'w')
-    file.write(f'Difficulty{difficulty}\n')
-    file.write(f'firstplaythroughTrue\n')
-    for x in range(2):
-        file.write(f'None\n')
+
+    save_data = SaveFile(difficulty=difficulty_num[difficulty], player_location=None, map=None)
+    with open(f"gamesaves/{typedText}.txt", "w") as file:
+        file.write(save_data.model_dump_json())
+
     gameSaves = os.listdir('gamesaves')
 
 
 game_state_global = None
 
 
-def loadFile(file: str) -> None:
+def loadFile(file_name: str) -> None:
     # loads the chosen game file. This function closes the main menu and starts the game
     # Input:
     #   file - string, determines which file is loaded
     # Output:
     #   Starts the game
 
-    global inGame, loadMenu, currentFile, tile_map, fileLine, game_state_global
+    global inGame, loadMenu, currentFile, tile_map, game_state_global, difficulty
     inGame = True
     loadMenu = False
-    currentFile = file
+    currentFile = file_name
     enemies: list[Enemy] = []
     bullets_fired: list[Bullet] = []
     wand_magic_fired: list[WandMagicThing] = []
-    player = Player(100, pygame.Vector2(0, 0), pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
+
+    with open(f"gamesaves/{file_name}", "r") as file:
+        save_data = SaveFile.model_validate_json(file.read())
+
+    player = Player(100, pygame.Vector2(90, -10), pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
                                              screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
                                              (screenHeight / 2) / 20), [None, None])
+    if save_data.player_location is not None: player.position = pygame.Vector2(save_data.player_location)
+
+    if save_data.map is not None: tile_map = save_data.map
+    else: tile_map = generate_map(PresetMaps, 5, 5)
+
+    if save_data.difficulty is not None: difficulty = save_data.difficulty
+    else: difficulty = 1
+
     game_state_global = GameState(player, enemies, bullets_fired, wand_magic_fired)
-    with open(f"gamesaves/{file}", "r") as f:
-        fileLine = [line.strip() for line in f]
-    if fileLine[1] == "firstPlaythroughFalse":
-        player.position = pygame.Vector2(float(fileLine[2].split(" ")[0]), float(fileLine[2].split(" ")[1]))
-        tile_map = []
-        mapTemp = fileLine[3].split("  ")
-        for x in range(len(mapTemp)):
-            tile_map.append(mapTemp[x].split(" "))
-        for y in range(len(tile_map)):
-            for x in range(len(tile_map[y])):
-                if tile_map[y][x] == "FLOOR_COLOR":
-                    tile_map[y][x] = FLOOR_COLOR
-                elif tile_map[y][x] == "FLOOR_NEXT_COL":
-                    tile_map[y][x] = FLOOR_NEXT_COL
-                elif tile_map[y][x] == "WALL_COLOR":
-                    tile_map[y][x] = WALL_COLOR
-                elif tile_map[y][x] == "GRID_COLOR":
-                    tile_map[y][x] = GRID_COLOR
-    load_save(file, game_state_global)
+    load_save(file_name, game_state_global)
 
 
-def mainMenu(menu):
+def mainMenu(menu: Menu) -> None:
     # Shows and handles almost everything related to the main menu
     # It determines which buttons to show, then displays them on the screen.
     # Input:
@@ -571,7 +574,7 @@ def do_pathfinding(game_state: GameState):
                             for i in reversed(range(len(pathGrid[l]))):
                                 if pathGrid[l][i] == 'x' or (pathGrid[l][i] == 'e' and (
                                         pathGrid[l][i - 1] == 's' or pathGrid[l][i + 1] == 's')):
-                                    n = get_grid_pos(game_state.player.position)[0]
+                                    n = int(get_grid_pos(game_state.player.position)[0])
                             enemiesToMove.append([x, (n, l)])
         pathTicks = 50
     if enemiesToMove != []:
@@ -617,32 +620,12 @@ def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y
 
 
 def load_save(file: str, game_state: GameState) -> None:
-    global enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, fileLine, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, tile_map, tileRect, tile, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
-    game_state.player.inventory = [None, None]
-    with open(f"gamesaves/{file}", "r") as f:
-        fileLine = [line.strip() for line in f]
+    global enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, tile_map, tileRect, tile, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
     enemiesDefeated = False
     gameLost = False
     pathTicks = 0
     spawnedItems = []
     enemiesToMove = []
-    if fileLine[0] == "DifficultyEasy":
-        difficulty = 1
-        attackMultiplierEnemies = 0.5
-    elif fileLine[0] == "DifficultyMedium":
-        difficulty = 2
-        attackMultiplierEnemies = 0.8
-    elif fileLine[0] == "DifficultyDifficult":
-        difficulty = 3
-        attackMultiplierEnemies = 1
-    elif fileLine[0] == "DifficultyVery difficult":
-        difficulty = 4
-        attackMultiplierEnemies = 1.25
-    if fileLine[1] == "firstplaythroughTrue":
-        game_state.player.position = pygame.Vector2(90, -10)
-        fileLine[2] = game_state.player.position
-        tile_map = generate_map(PresetMaps, 5, 5)
-        fileLine[1] = 'firstPlaythroughFalse'
     isOnGround()
     for x in range(20):
         spawnedItems.append(spawn_item(Powerup))
@@ -692,7 +675,7 @@ class RenderedElements:
     inventory_background: pygame.Rect
 
 
-def render_map(game_state: GameState, tile_map) -> list[list[pygame.Rect]]:
+def render_map(game_state: GameState, tile_map: list[list[tuple[int, int, int]]]) -> list[list[pygame.Rect]]:
     tiles_rendered: list[list[pygame.Rect]] = []
     for x, colour in enumerate(tile_map, start=0):
         tiles_rendered.append([])
@@ -1179,43 +1162,11 @@ def render_inventory(game_state: GameState) -> pygame.Rect:
     return inventory_background
 
 
-def saveFile():
-    # Saves the current file, called when exiting the game
-    # Input:
-    #   currentFile - string, the name of the file to be saved
-    # Output:
-    # writes the player location, the map details, and the fact that the file has been played to the file.
-    global fileLine
-    fileLine[2] = str(game_state_global.player.position[0]) + " " + str(game_state_global.player.position[1])
-    fileLine[3] = ""
-    for y in range(len(tile_map)):
-        for x in range(len(tile_map[y])):
-            if tile_map[y][x] == FLOOR_COLOR:
-                tile_map[y][x] = "FLOOR_COLOR"
-            elif tile_map[y][x] == FLOOR_NEXT_COL:
-                tile_map[y][x] = "FLOOR_NEXT_COL"
-            elif tile_map[y][x] == WALL_COLOR:
-                tile_map[y][x] = "WALL_COLOR"
-            elif tile_map[y][x] == GRID_COLOR:
-                tile_map[y][x] = "GRID_COLOR"
-    for y in range(len(tile_map)):
-        mapTemp = tile_map[y]
-        tile_map[y] = ""
-        for x in range(len(mapTemp)):
-            if x == len(mapTemp) - 1:
-                tile_map[y] += mapTemp[x]
-            else:
-                tile_map[y] += mapTemp[x] + " "
+def saveFile(game_state: GameState, file_name: str):
 
-    for x in range(len(tile_map)):
-        if x == len(tile_map) - 1:
-            fileLine[3] += tile_map[x]
-        else:
-            fileLine[3] += tile_map[x] + "  "
-    for x in range(len(fileLine)):
-        fileLine[x] = str(fileLine[x]) + "\n"
-    with open("gamesaves/" + currentFile, 'w') as file:
-        file.writelines(fileLine)
+    save_file = SaveFile(difficulty=difficulty, map=tile_map, player_location=tuple(game_state.player.position))
+    with open(f"gamesaves/{file_name}", "w") as file:
+        file.write(save_file.model_dump_json())
 
 
 CollectItem = False
@@ -1269,7 +1220,7 @@ while True:
                     jumping = True
                     jumpCount = 0
             if event.button == 7:
-                saveFile()
+                if inGame: saveFile(game_state_global, currentFile)
                 pygame.quit()
                 sys.exit()
             if event.button == 2:
@@ -1282,20 +1233,20 @@ while True:
             ButtonNotUp = False
         if event.type == QUIT:
             if inGame:
-                saveFile()
+                if inGame: saveFile(game_state_global, currentFile)
             pygame.quit()
             sys.exit()
         if event.type == pygame.MOUSEBUTTONUP:
             mouseNotUp = False
         if event.type == pygame.KEYDOWN:
-            if menu == 'new':
+            if menu == Menu.NEW:
                 if event.key == pygame.K_BACKSPACE:
                     typedText = typedText[:-1]
                 else:
                     typedText += event.unicode
             if inGame:
                 if event.key == pygame.K_ESCAPE:
-                    saveFile()
+                    saveFile(game_state_global, currentFile)
                     pygame.quit()
                     sys.exit()
                 if event.key == pygame.K_SPACE:
@@ -1316,7 +1267,7 @@ while True:
                     jumpCount = 0
 
         if event.type == pygame.MOUSEWHEEL:
-            if menu == 'play' and loadMenu == True and menuNameTextRect.centery + (
+            if menu == Menu.PLAY and loadMenu == True and menuNameTextRect.centery + (
                     50 + ((len(buttonsList) - 1) * 50)) > screenHeight:
                 ButtonsListOffset += event.y * 10
                 if ButtonsListOffset > 0:
@@ -1422,7 +1373,6 @@ while True:
 
                 game_state_global.player.position[0] -= move.x
                 game_state_global.player.position[1] -= move.y
-                fileLine[2] = game_state_global.player.position
 
             if timeRemainingSpeedBoost > 0:
                 if timeRemainingSpeedBoost == 1:
