@@ -519,9 +519,6 @@ def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Ve
                 int((((screenHeight / 2) - position.y) / tileHeight) // 1))
     return pygame.Vector2((((screenWidth / 2) - position.x) / tileWidth), (((screenHeight / 2) - position.y) / tileHeight))
 
-
-mapGenerated = False
-
 inThread = False
 
 
@@ -620,7 +617,7 @@ def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y
 
 
 def load_save(file: str, game_state: GameState) -> None:
-    global enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, fileLine, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, tile_map, tileRect, tile, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
+    global enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, fileLine, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, tile_map, tileRect, tile, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
     game_state.player.inventory = [None, None]
     with open(f"gamesaves/{file}", "r") as f:
         fileLine = [line.strip() for line in f]
@@ -718,33 +715,19 @@ def render_frame(game_state: GameState, tile_map, speed_boost_remaining, attack_
     return RenderedElements(items_rendered, tiles_rendered, inventory_background)
 
 
-def game_frame(game_state: GameState) -> None:  # TODO: Split into multiple functions
-    # Handles most of the gameplay.
-    # The main game function where most other functions are called (other than menu functions)
-    # Sets up the file if it is the first time running the file
-    # loads everything in the first frame
-    # manages player health, enemy health, enemy/player attacks, UI elements, starting pathfinding, etc.
-    # Input:
-    #   file - string, the file that is currently open
-    global pathfindingThread, enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, playerGridPosition, fileLine, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, timeSinceSword, playerHealth, timeSinceEnemyAttack, randomEnemyAttackTime, randomAttackTime, map, player, tileRect, running, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
-    render_data = render_frame(game_state, tile_map, timeRemainingSpeedBoost, timeRemainingAttackBoost)
+def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
+    global pathfindingThread, enemiesDefeated, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, TriggerNotUp, spawnedItems, gameLost, tileRect, running, inThread, ButtonNotUp, mouseNotUp
     tileRect = render_data.tiles_rendered
-    if gameLost:
-        lostGame()
-        return
-    if enemiesDefeated:
-        wonGame()
-        return
     if CollectItem: collect_item(game_state, spawnedItems, render_data.items_rendered)
+
     if not pathfindingThread.is_alive():
         pathfindingThread = Thread(target=do_pathfinding, args=[game_state])
         pathfindingThread.start()
-    if not render_data.inventory_background.collidepoint(pygame.mouse.get_pos()) and ((pygame.mouse.get_pressed()[
-                                                                                           0] and mouseNotUp == False) or (
-                                                                                              (joysticks and joysticks[
-                                                                                                  0].get_axis(
-                                                                                                  5) > 0.5) and TriggerNotUp == False)) and \
-            game_state.player.inventory[itemSelected] is not None:
+
+    if (not render_data.inventory_background.collidepoint(pygame.mouse.get_pos())
+            and ((pygame.mouse.get_pressed()[0] and mouseNotUp == False)
+                 or ((joysticks and joysticks[0].get_axis(5) > 0.5) and TriggerNotUp == False))
+            and game_state.player.inventory[itemSelected] is not None):
 
         if pygame.mouse.get_pressed()[0]:
             mouseNotUp = True
@@ -753,21 +736,16 @@ def game_frame(game_state: GameState) -> None:  # TODO: Split into multiple func
             TriggerNotUp = True
             attack(game_state, game_state.player, True)
 
-    for x in range(len(game_state.enemies)):
+    for enemy in game_state.enemies:
+        distance = pygame.math.Vector2(abs(enemy.rect.x - game_state.player.rect.x),
+                                       abs(enemy.rect.y - game_state.player.rect.y))
+        if isinstance(enemy, Knight) and distance.length() < 40:
+            attack(game_state, enemy)
+        if not isinstance(enemy, Knight) and distance.length() < 300:
+            attack(game_state, enemy)
+        enemy.weapon.time_since_attack += 1
 
-        if (isinstance(game_state.enemies[x], Knight) and
-                abs(game_state.enemies[x].rect.x - game_state.player.rect.x) < 30 and
-                abs(game_state.enemies[x].rect.y - game_state.player.rect.y) < 40):
-            attack(game_state, game_state.enemies[x])
-
-        distance = pygame.math.Vector2(abs(game_state.enemies[x].rect.x - game_state.player.rect.x),
-                                       abs(game_state.enemies[x].rect.y - game_state.player.rect.y))
-        if (distance.length() < 300 and
-                (isinstance(game_state.enemies[x], Soldier) or
-                 isinstance(game_state.enemies[x], Wizard))):
-            attack(game_state, game_state.enemies[x])
-
-        game_state.enemies[x].weapon.time_since_attack += 1
+    manageBullets(game_state)
 
     for item in game_state.player.inventory:
         if isinstance(item, Weapon): item.time_since_attack += 1
@@ -776,20 +754,18 @@ def game_frame(game_state: GameState) -> None:  # TODO: Split into multiple func
         1 for item in spawnedItems
         if isinstance(item, Powerup) and item.type == PowerupType.HEALTH_BOOST
     )
-    if health_boost_num < 10:
-        if timeSinceSpawnHealthBoosts >= 600:
-            spawnedItems.append(spawn_item(Powerup, True))
-            timeSinceSpawnHealthBoosts = 0
+    if health_boost_num < 10 and timeSinceSpawnHealthBoosts >= 600:
+        spawnedItems.append(spawn_item(Powerup, True))
+        timeSinceSpawnHealthBoosts = 0
     timeSinceSpawnHealthBoosts += 1
 
     if game_state.player.health <= 0:
         gameLost = True
-    manageBullets(game_state)
     if not game_state.enemies:
         enemiesDefeated = True
 
 
-def lostGame():
+def lostGame() -> None:
     # If the player has died, this function is called and displays this screen which creates a gray translucent background, and displays "GAME OVER!" and two buttons to respawn or go to the menu.
     lostGameRect = pygame.Rect(0, 0, screenWidth, screenHeight)
     draw_rect_alpha(screen, (50, 50, 50, 128), lostGameRect)
@@ -800,7 +776,7 @@ def lostGame():
     button('Menu', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100), toMenu)
 
 
-def wonGame():
+def wonGame() -> None:
     # If the player has killed all enemies (and therefore won), this function is called and displays this screen which creates a gray translucent background, and displays "YOU WON!" and two buttons to play again or go to the menu.
     lostGameRect = pygame.Rect(0, 0, screenWidth, screenHeight)
     draw_rect_alpha(screen, (50, 50, 50, 128), lostGameRect)
@@ -815,15 +791,13 @@ def wonGame():
 def respawn():
     global gameLost, firstTimeRun, mapGenerated
     gameLost = False
-    mapGenerated = False
     loadFile(currentFile)
 
 
 def toMenu():
     # takes the user back to the main menu. This function is called when the player presses the button to go to the menu on the game over screen.
     global mapGenerated, inGame, loadMenu, firstTimeRun
-    menuEquals('main')
-    mapGenerated = False
+    menuEquals(Menu.MAIN)
     inGame = False
     loadMenu = True
 
@@ -840,7 +814,7 @@ attackStrength = random.randint(6, 9)
 attackMultiplier = 1
 
 
-def attack(given_state: GameState, origin: Player | Enemy, controller: bool = False) -> None:
+def attack(game_state: GameState, origin: Player | Enemy, controller: bool = False) -> None:
     # called when the player or an enemy uses a weapon. Checks to see who fired the weapon, which weapon was used and whether the player is close enough to use the weapon.
     # If all conditions are met, it then either lowers the enemy/player health (if it is a sword being used) or spawns a bullet/magic
     # Input:
@@ -863,33 +837,32 @@ def attack(given_state: GameState, origin: Player | Enemy, controller: bool = Fa
                                    (pygame.mouse.get_pos()[0] - origin.rect.centerx))
             else:
                 angle = math.atan2(joysticks[0].get_axis(3), joysticks[0].get_axis(2))
-            weapon.shoot(given_state, origin, get_grid_pos(origin.position, False), angle, attackMultiplier)
+            weapon.shoot(game_state, origin, get_grid_pos(origin.position, False), angle, attackMultiplier)
         else:
-            weapon.shoot(given_state, origin, origin.position.copy(),
-                         math.atan2((given_state.player.rect.centery - origin.rect.centery),
-                                    (given_state.player.rect.centerx - origin.rect.centerx)), attackMultiplierEnemies)
+            weapon.shoot(game_state, origin, origin.position.copy(),
+                         math.atan2((game_state.player.rect.centery - origin.rect.centery),
+                                    (game_state.player.rect.centerx - origin.rect.centerx)), attackMultiplierEnemies)
     elif isinstance(weapon, Sword):
         if isinstance(origin, Player):
-            for x in range(len(given_state.enemies)):
-                if abs(given_state.enemies[x].rect.centerx - origin.rect.centerx) < 50 and abs(
-                        given_state.enemies[x].rect.centery - origin.rect.centery) < 50:
-                    weapon.attack(given_state.enemies[x], attackMultiplier)
+            for x in range(len(game_state.enemies)):
+                if abs(game_state.enemies[x].rect.centerx - origin.rect.centerx) < 50 and abs(
+                        game_state.enemies[x].rect.centery - origin.rect.centery) < 50:
+                    weapon.attack(game_state.enemies[x], attackMultiplier)
         else:
-            weapon.attack(given_state.player, attackMultiplierEnemies)
+            weapon.attack(game_state.player, attackMultiplierEnemies)
     elif isinstance(weapon, Wand):
         if isinstance(origin, Player):
-            shortestDistance: tuple[int, float] = 0, 1000000.0
-            if len(given_state.enemies) > 0:
-                for x in range(len(given_state.enemies)):
-                    distanceToX = pygame.math.Vector2(given_state.enemies[x].rect.centerx - origin.rect.centerx,
-                                                      given_state.enemies[x].rect.centery - origin.rect.centery)
-                    if distanceToX.length() < shortestDistance[1]:
-                        shortestDistance = x, distanceToX.length()
-                if shortestDistance[1] < 300:
-                    weapon.fire(given_state, given_state.enemies[shortestDistance[0]],
-                                get_grid_pos(origin.position, False), attackMultiplier)
+            shortestDistance: tuple[Enemy | None, float] = None, 1000000.0
+            for enemy in game_state.enemies:
+                distanceToX = pygame.math.Vector2(enemy.rect.centerx - origin.rect.centerx,
+                                                  enemy.rect.centery - origin.rect.centery)
+                if distanceToX.length() < shortestDistance[1]:
+                    shortestDistance = enemy, distanceToX.length()
+            if shortestDistance[1] < 300 and shortestDistance[0] is not None:
+                weapon.fire(game_state, shortestDistance[0],
+                            get_grid_pos(origin.position, False), attackMultiplier)
         else:
-            weapon.fire(given_state, given_state.player, origin.position, attackMultiplierEnemies)
+            weapon.fire(game_state, game_state.player, origin.position, attackMultiplierEnemies)
 
 
 def manageBullets(given_state: GameState) -> None:
@@ -902,7 +875,7 @@ def manageBullets(given_state: GameState) -> None:
             target_grid_pos = get_grid_pos(magic.target.position, False)
             dx, dy = (target_grid_pos[0] - (magic.position[0]), target_grid_pos[1] - (magic.position[1]))
             stepx, stepy = (dx / 25, dy / 25)
-            magic.position = [magic.position[0] + stepx, magic.position[1] + stepy]
+            magic.position = pygame.Vector2(magic.position[0] + stepx, magic.position[1] + stepy)
             magic.rect = pygame.Rect(((tileWidth) * (magic.position[0])) + given_state.player.position[0],
                                      ((tileHeight) * (magic.position[1])) + given_state.player.position[1],
                                      magic.target.rect.width / 4,
@@ -922,7 +895,7 @@ def manageBullets(given_state: GameState) -> None:
         elif isinstance(magic.target, Enemy):
             dx, dy = (magic.target.position[0] - (magic.position[0]), magic.target.position[1] - (magic.position[1]))
             stepx, stepy = (dx / 25, dy / 25)
-            magic.position = [magic.position[0] + stepx, magic.position[1] + stepy]
+            magic.position = pygame.Vector2(magic.position[0] + stepx, magic.position[1] + stepy)
             magic.rect = pygame.Rect(((tileWidth) * (magic.position[0])) + given_state.player.position[0],
                                      ((tileHeight) * (magic.position[1])) + given_state.player.position[1],
                                      magic.target.rect.width / 4,
@@ -1363,7 +1336,10 @@ while True:
     keys = pygame.key.get_pressed()
 
     if inGame:
-        game_frame(game_state_global)
+        render_data = render_frame(game_state_global, tile_map, timeRemainingSpeedBoost, timeRemainingAttackBoost)
+        if gameLost: lostGame()
+        elif enemiesDefeated: wonGame()
+        else: game_frame(game_state_global, render_data)
 
         key = pygame.key.get_pressed()
 
