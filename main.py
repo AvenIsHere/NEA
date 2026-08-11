@@ -1,6 +1,5 @@
 # importing different libraries
 import dataclasses
-import json
 import math
 import os
 import random
@@ -9,8 +8,7 @@ from abc import ABC
 from enum import Enum
 from threading import Thread
 from typing import ClassVar
-
-import pydantic
+import jsonpickle  # type: ignore[import-not-found]
 from pydantic import BaseModel
 
 import pathfinding  # type: ignore[import-untyped]
@@ -392,10 +390,10 @@ def setDifficulty():
     }
     difficulty = difficulties.get(difficulty, 'Easy')
 
-
-class SaveFile(BaseModel):
+@dataclasses.dataclass
+class SaveFile:
     difficulty: int | None
-    player_location: tuple[float, float] | None
+    game_state: GameState | None
     map: list[list[tuple[int, int, int]]] | None
 
 difficulty_num = {
@@ -406,19 +404,11 @@ difficulty_num = {
 }
 
 def createFile():
-    # creates a game file
-    # Input:
-    #   difficulty - string, determines the difficulty of the game save
-    #   typedText - string, determines the name of the game file
-    # Output:
-    #   Creates a game file with the name provided
-    global fileName
-    global difficulty
     global gameSaves
 
-    save_data = SaveFile(difficulty=difficulty_num[difficulty], player_location=None, map=None)
+    save_data = SaveFile(difficulty=difficulty_num[difficulty], game_state=None, map=None)
     with open(f"gamesaves/{typedText}.txt", "w") as file:
-        file.write(save_data.model_dump_json())
+        file.write(jsonpickle.encode(save_data))
 
     gameSaves = os.listdir('gamesaves')
 
@@ -442,12 +432,14 @@ def loadFile(file_name: str) -> None:
     wand_magic_fired: list[WandMagicThing] = []
 
     with open(f"gamesaves/{file_name}", "r") as file:
-        save_data = SaveFile.model_validate_json(file.read())
+        save_data = jsonpickle.decode(file.read())
+    if not isinstance(save_data, SaveFile):
+        raise ValueError("Save file is improperly formatted")
 
-    player = Player(100, pygame.Vector2(90, -10), pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
+    if save_data.game_state is not None: game_state_global = save_data.game_state
+    else: game_state_global = GameState(Player(100, pygame.Vector2(90, -10), pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
                                              screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
-                                             (screenHeight / 2) / 20), [None, None])
-    if save_data.player_location is not None: player.position = pygame.Vector2(save_data.player_location)
+                                             (screenHeight / 2) / 20), [None, None]), enemies, bullets_fired, wand_magic_fired)
 
     if save_data.map is not None: tile_map = save_data.map
     else: tile_map = generate_map(PresetMaps, 5, 5)
@@ -455,8 +447,7 @@ def loadFile(file_name: str) -> None:
     if save_data.difficulty is not None: difficulty = save_data.difficulty
     else: difficulty = 1
 
-    game_state_global = GameState(player, enemies, bullets_fired, wand_magic_fired)
-    load_save(file_name, game_state_global)
+    load_save(game_state_global)
 
 
 def mainMenu(menu: Menu) -> None:
@@ -619,7 +610,7 @@ def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y
     return world_map
 
 
-def load_save(file: str, game_state: GameState) -> None:
+def load_save(game_state: GameState) -> None:
     global enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, tile_map, tileRect, tile, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
     enemiesDefeated = False
     gameLost = False
@@ -634,7 +625,7 @@ def load_save(file: str, game_state: GameState) -> None:
     elif difficulty == 2: health_boost_num = 5
     for x in range(health_boost_num):
         spawnedItems.append(spawn_item(Powerup, True))
-    game_state.enemies = spawnEnemies(40)
+    if not game_state.enemies: game_state.enemies = spawnEnemies(40)
     enemyPreviousPosition = []
     for x in range(len(game_state.enemies)):
         enemyPreviousPosition.append(game_state.enemies[x].position)
@@ -700,6 +691,7 @@ def render_frame(game_state: GameState, tile_map, speed_boost_remaining, attack_
 
 def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
     global pathfindingThread, enemiesDefeated, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, TriggerNotUp, spawnedItems, gameLost, tileRect, running, inThread, ButtonNotUp, mouseNotUp
+
     tileRect = render_data.tiles_rendered
     if CollectItem: collect_item(game_state, spawnedItems, render_data.items_rendered)
 
@@ -1164,9 +1156,9 @@ def render_inventory(game_state: GameState) -> pygame.Rect:
 
 def saveFile(game_state: GameState, file_name: str):
 
-    save_file = SaveFile(difficulty=difficulty, map=tile_map, player_location=tuple(game_state.player.position))
+    save_file = SaveFile(difficulty=difficulty, map=tile_map, game_state=game_state)
     with open(f"gamesaves/{file_name}", "w") as file:
-        file.write(save_file.model_dump_json())
+        file.write(jsonpickle.encode(save_file))
 
 
 CollectItem = False
