@@ -407,7 +407,7 @@ def createFile():
     global gameSaves
 
     save_data = SaveFile(difficulty=difficulty_num[difficulty], game_state=None, map=None)
-    with open(f"gamesaves/{typedText}.txt", "w") as file:
+    with open(f"gamesaves/{typedText}.json", "w") as file:
         file.write(jsonpickle.encode(save_data))
 
     gameSaves = os.listdir('gamesaves')
