@@ -278,6 +278,7 @@ class Soldier(Enemy):
 enemy_types: list[type[Enemy]] = [Knight, Soldier, Wizard]
 
 class Powerup(Item):
+    time_remaining: int = 1000
 
     def __init__(self, location: pygame.Vector2):
         super().__init__(location)
@@ -299,10 +300,12 @@ powerup_types: list[type[Powerup]] = [SpeedBoost, DamageBoost, HealthBoost]
 
 class Player(Entity):
     inventory: list[Item | None]
+    powerups: list[Powerup]
 
     def __init__(self, health: float, position: pygame.Vector2, rect: pygame.Rect, inventory: list[Item | None]):
         super().__init__(health, position, rect)
         self.inventory = inventory
+        self.powerups = []
 
 
 inGame = False
@@ -427,7 +430,7 @@ def loadFile(file_name: str) -> None:
     # Output:
     #   Starts the game
 
-    global inGame, loadMenu, currentFile, tile_map, game_state_global, difficulty, health_boost_num
+    global inGame, loadMenu, currentFile, tile_map, game_state_global, difficulty, health_boost_num, pathTicks
     inGame = True
     loadMenu = False
     currentFile = file_name
@@ -439,11 +442,10 @@ def loadFile(file_name: str) -> None:
 
     if save_data.map is not None: tile_map = save_data.map
     else: tile_map = generate_map(PresetMaps, 5, 5)
+    isOnGround()
 
     if save_data.difficulty is not None: difficulty = save_data.difficulty
     else: difficulty = 1
-
-    isOnGround()
 
     if save_data.game_state is not None: game_state_global = save_data.game_state
     else:
@@ -458,8 +460,7 @@ def loadFile(file_name: str) -> None:
 
     if not game_state_global.enemies: game_state_global.enemies = spawnEnemies(40)
 
-    load_save(game_state_global)
-
+    pathTicks = 0
 
 def mainMenu(menu: Menu) -> None:
     # Shows and handles almost everything related to the main menu
@@ -524,16 +525,13 @@ def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Ve
                 int((((screenHeight / 2) - position.y) / tileHeight) // 1))
     return pygame.Vector2((((screenWidth / 2) - position.x) / tileWidth), (((screenHeight / 2) - position.y) / tileHeight))
 
-inThread = False
-
 
 def do_pathfinding(game_state: GameState):
     # Determines if the enemies should be moving.
     # for each enemy, it finds the players position, the enemies position, the possible paths that can be taken, and finally whether a path exists between the enemy and the player
     # It then moves the enemy in the direction of the player (or away, if that is what the pathfinding finds) if a path was found.
     # A new path for each enemy is only generated every 50 frames, however the enemy is moved every frame.
-    global enemiesToMove, grid, pathGrid, pathTicks, inThread, onGroundMap
-    inThread = True
+    global enemiesToMove, grid, pathGrid, pathTicks, onGroundMap
     if pathTicks == 0:
         enemiesToMove = []
         grid = Grid(matrix=onGroundMap)
@@ -587,15 +585,12 @@ def do_pathfinding(game_state: GameState):
                 if game_state.enemies[enemiesToMove[x][0]].position[0] // 1 < enemiesToMove[x][1][0] // 1:
                     game_state.enemies[enemiesToMove[x][0]].position[0] += 0.05
     pathTicks -= 1
-    inThread = False
 
 
 health_boost_num = 0
 timeSinceSpawnHealthBoosts = 0
 
 attackMultiplierEnemies = 1
-
-enemiesDefeated = False
 
 
 def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y: int) -> list[list[tuple[int, int, int]]]:
@@ -621,17 +616,6 @@ def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y
     return world_map
 
 
-def load_save(game_state: GameState) -> None:
-    global enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, gameLost, tile_map, tileRect, tile, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
-    enemiesDefeated = False
-    gameLost = False
-    pathTicks = 0
-    enemiesToMove = []
-    enemyPreviousPosition = []
-    for x in range(len(game_state.enemies)):
-        enemyPreviousPosition.append(game_state.enemies[x].position)
-
-
 @dataclasses.dataclass
 class UIBar:
     percent: float
@@ -639,15 +623,15 @@ class UIBar:
     colour: tuple[int, int, int]
 
 
-def render_UI(game_state: GameState, speed_boost_remaining: int, attack_boost_remaining: int) -> None:
+def render_UI(game_state: GameState) -> None:
     ui_items: list[UIBar] = []
 
     if game_state.player.health > 0: ui_items.append(
         UIBar(game_state.player.health / 100, str(game_state.player.health), (200, 25, 25)))
     if len(game_state.enemies) > 0: ui_items.append(
         UIBar(len(game_state.enemies) / 40, str(len(game_state.enemies)) + " enemies remaining", (128, 128, 128)))
-    if speed_boost_remaining > 0: ui_items.append(UIBar(speed_boost_remaining / 1000, "Speed Boost", (50, 50, 255)))
-    if attack_boost_remaining > 0: ui_items.append(UIBar(attack_boost_remaining / 1000, "Damage x2", (0, 200, 255)))
+    for powerup in game_state.player.powerups:
+        ui_items.append(UIBar(powerup.time_remaining / 1000, powerup.name, powerup.colour))
 
     for index, ui_element in enumerate(ui_items):
         element_bar = pygame.Rect(20, 20 + (index * 50), 200 * ui_element.percent, 20)
@@ -678,19 +662,19 @@ def render_map(game_state: GameState, tile_map: list[list[tuple[int, int, int]]]
     return tiles_rendered
 
 
-def render_frame(game_state: GameState, tile_map, speed_boost_remaining, attack_boost_remaining) -> RenderedElements:
+def render_frame(game_state: GameState, tile_map) -> RenderedElements:
     screen.fill((50, 50, 50))
     tiles_rendered = render_map(game_state, tile_map)
     render_items(game_state)
     render_enemies(game_state)
     pygame.draw.rect(screen, (0, 255, 0), game_state.player.rect)
     inventory_background = render_inventory(game_state)
-    render_UI(game_state, speed_boost_remaining, attack_boost_remaining)
+    render_UI(game_state)
     return RenderedElements(tiles_rendered, inventory_background)
 
 
 def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
-    global pathfindingThread, enemiesDefeated, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, TriggerNotUp, gameLost, tileRect, running, inThread, ButtonNotUp, mouseNotUp
+    global pathfindingThread, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, TriggerNotUp, tileRect, ButtonNotUp, mouseNotUp
 
     tileRect = render_data.tiles_rendered
     if CollectItem: collect_item(game_state)
@@ -734,10 +718,9 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
         timeSinceSpawnHealthBoosts = 0
     timeSinceSpawnHealthBoosts += 1
 
-    if game_state.player.health <= 0:
-        gameLost = True
-    if not game_state.enemies:
-        enemiesDefeated = True
+    for powerup in game_state.player.powerups:
+        powerup.time_remaining -= 1
+        if powerup.time_remaining <= 0: game_state.player.powerups.remove(powerup)
 
 
 def lostGame() -> None:
@@ -764,14 +747,12 @@ def wonGame() -> None:
 
 
 def respawn():
-    global gameLost, firstTimeRun, mapGenerated
-    gameLost = False
     loadFile(currentFile)
 
 
 def toMenu():
     # takes the user back to the main menu. This function is called when the player presses the button to go to the menu on the game over screen.
-    global mapGenerated, inGame, loadMenu, firstTimeRun
+    global inGame, loadMenu
     menuEquals(Menu.MAIN)
     inGame = False
     loadMenu = True
@@ -786,7 +767,6 @@ def draw_rect_alpha(surface: pygame.Surface, color: tuple[int, int, int, int], r
 
 
 attackStrength = random.randint(6, 9)
-attackMultiplier = 1
 
 
 def attack(game_state: GameState, origin: Player | Enemy, controller: bool = False) -> None:
@@ -812,7 +792,8 @@ def attack(game_state: GameState, origin: Player | Enemy, controller: bool = Fal
                                    (pygame.mouse.get_pos()[0] - origin.rect.centerx))
             else:
                 angle = math.atan2(joysticks[0].get_axis(3), joysticks[0].get_axis(2))
-            weapon.shoot(game_state, origin, get_grid_pos(origin.position, False), angle, attackMultiplier)
+            attack_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in game_state.player.powerups) else 2
+            weapon.shoot(game_state, origin, get_grid_pos(origin.position, False), angle, attack_multiplier)
         else:
             weapon.shoot(game_state, origin, origin.position.copy(),
                          math.atan2((game_state.player.rect.centery - origin.rect.centery),
@@ -822,7 +803,8 @@ def attack(game_state: GameState, origin: Player | Enemy, controller: bool = Fal
             for x in range(len(game_state.enemies)):
                 if abs(game_state.enemies[x].rect.centerx - origin.rect.centerx) < 50 and abs(
                         game_state.enemies[x].rect.centery - origin.rect.centery) < 50:
-                    weapon.attack(game_state.enemies[x], attackMultiplier)
+                    attack_multiplier = 1 if not any(isinstance(n, DamageBoost) for n in game_state.player.powerups) else 2
+                    weapon.attack(game_state.enemies[x], attack_multiplier)
         else:
             weapon.attack(game_state.player, attackMultiplierEnemies)
     elif isinstance(weapon, Wand):
@@ -834,8 +816,9 @@ def attack(game_state: GameState, origin: Player | Enemy, controller: bool = Fal
                 if distanceToX.length() < shortestDistance[1]:
                     shortestDistance = enemy, distanceToX.length()
             if shortestDistance[1] < 300 and shortestDistance[0] is not None:
+                attack_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in game_state.player.powerups) else 2
                 weapon.fire(game_state, shortestDistance[0],
-                            get_grid_pos(origin.position, False), attackMultiplier)
+                            get_grid_pos(origin.position, False), attack_multiplier)
         else:
             weapon.fire(game_state, game_state.player, origin.position, attackMultiplierEnemies)
 
@@ -843,7 +826,6 @@ def attack(game_state: GameState, origin: Player | Enemy, controller: bool = Fal
 def manageBullets(given_state: GameState) -> None:
     # is called every frame.
     # manages any current bullets; moves them, checks if they are colliding with an enemy/the player (if it is, it reduces the health of the player/enemy and removes the bullet), checks if it has been alive too long (if it is magic), checks if it has collided with any walls (if it is a bullet. if so, it removes it)
-    global AttackMultiplier
     breakForLoop = False
     for magic in given_state.wand_magic_fired:
         if isinstance(magic.target, Player):
@@ -880,7 +862,7 @@ def manageBullets(given_state: GameState) -> None:
                 if magic.target.health <= 1:
                     given_state.enemies.remove(magic.target)
                 else:
-                    if attackMultiplier == 2:
+                    if any(isinstance(x, DamageBoost) for x in given_state.player.powerups):
                         magic.target.health = int((magic.target.health * (2 / 4)) // 1)
                     else:
                         magic.target.health = int((magic.target.health * (3 / 4)) // 1)
@@ -903,7 +885,8 @@ def manageBullets(given_state: GameState) -> None:
                 if enemy.health <= 15:
                     given_state.enemies.remove(enemy)
                 else:
-                    enemy.health -= 15 * attackMultiplier
+                    damage_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in given_state.player.powerups) else 2
+                    enemy.health -= 15 * damage_multiplier
                 given_state.bullets_fired.remove(bullet)
                 breakForLoop = True
                 break
@@ -957,7 +940,6 @@ def spawn_item(item_type: type[Item], health_boost: bool = False) -> Item:
 
 
 def collect_item(game_state: GameState) -> None:
-    global speed, attackMultiplier, timeRemainingSpeedBoost, timeRemainingAttackBoost
     for x, item in reversed(list(enumerate(game_state.spawned_items))):
         if not (abs(game_state.player.rect.x - item.rect[0]) < 100 and abs(
                 game_state.player.rect.y - item.rect[1]) < 100):
@@ -968,20 +950,7 @@ def collect_item(game_state: GameState) -> None:
                     game_state.player.inventory[i] = item
                     game_state.spawned_items.remove(item)
                     break
-        if isinstance(item, SpeedBoost):
-            if speed != 400:
-                continue
-            speed = 300
-            timeRemainingSpeedBoost = 1000
-            game_state.spawned_items.remove(item)
-            break
-        if isinstance(item, DamageBoost):
-            if attackMultiplier != 1:
-                continue
-            attackMultiplier = 2
-            timeRemainingAttackBoost = 1000
-            game_state.spawned_items.remove(item)
-            break
+            return
         if isinstance(item, HealthBoost):
             if game_state.player.health == 100:
                 continue
@@ -991,6 +960,12 @@ def collect_item(game_state: GameState) -> None:
                 game_state.player.health = 100
             game_state.spawned_items.remove(item)
             break
+        if isinstance(item, Powerup):
+            if any(isinstance(x, type(item)) for x in game_state.player.powerups): continue
+            game_state.player.powerups.append(item)
+            game_state.spawned_items.remove(item)
+            break
+
 
 
 def render_items(game_state: GameState) -> None:
@@ -999,7 +974,6 @@ def render_items(game_state: GameState) -> None:
     #   items - array, the list of items to be rendered. It includes which item it is and where it is
     # Output:
     #   a bunch of pygame.Rects which are displayed on screen; the items.
-    global speed, timeRemainingSpeedBoost, attackMultiplier, timeRemainingAttackBoost
     width = screenWidth / 30
     height = screenHeight / 30
     for x, item in enumerate(game_state.spawned_items):
@@ -1027,10 +1001,7 @@ def render_items(game_state: GameState) -> None:
 def jump():
     # Is called when the player jumps
     # calculates the player movement up and down when jumping, as well as stopping the jump when landing by checking if the player is colliding with anything below.
-    global player
-    global jumpCount
-    global playerPosition
-    global jumping
+    global jumpCount, jumping
     if jumpCount < 20:
         move = pygame.math.Vector2(0, -((screenWidth / 800) * (0.1 * jumpCount)) - gravity - (screenWidth / 800))
     else:
@@ -1156,16 +1127,8 @@ def saveFile(game_state: GameState, file_name: str):
 
 CollectItem = False
 
-speed = 400
-timeRemainingSpeedBoost = 0
-timeRemainingAttackBoost = 0
-
 
 def isOnGround():
-    # Called at the beginning of the game. Determines which tiles are just above the ground.
-    # used when spawning enemies and items, and in enemy pathfinding.
-    # Output:
-    #   onGround - array, list of tiles which are just above the ground
     global onGround, onGroundMap
     onGround = []
     for x in range(len(tile_map)):
@@ -1272,9 +1235,9 @@ while True:
     keys = pygame.key.get_pressed()
 
     if inGame:
-        render_data = render_frame(game_state_global, tile_map, timeRemainingSpeedBoost, timeRemainingAttackBoost)
-        if gameLost: lostGame()
-        elif enemiesDefeated: wonGame()
+        render_data = render_frame(game_state_global, tile_map)
+        if game_state_global.player.health <= 0: lostGame()
+        elif not game_state_global.enemies: wonGame()
         else: game_frame(game_state_global, render_data)
 
         key = pygame.key.get_pressed()
@@ -1305,7 +1268,7 @@ while True:
                 jumping = False
                 jumpCount = 0
 
-        if not gameLost:
+        if not game_state_global.player.health <= 0:
             if jumping:
                 jump()
 
@@ -1313,6 +1276,7 @@ while True:
             if not jumping:
                 move.y -= gravity
             if move.length_squared() > 0:
+                speed = 400 if not any(isinstance(x, SpeedBoost) for x in game_state_global.player.powerups) else 300
                 move.scale_to_length(screenWidth / speed)
 
                 nextPlayer_x = game_state_global.player.rect.move(move.x, 0)
@@ -1359,35 +1323,7 @@ while True:
                 game_state_global.player.position[0] -= move.x
                 game_state_global.player.position[1] -= move.y
 
-            if timeRemainingSpeedBoost > 0:
-                if timeRemainingSpeedBoost == 1:
-                    speed = 400
-                timeRemainingSpeedBoost -= 1
-            if timeRemainingAttackBoost > 0:
-                if timeRemainingAttackBoost == 1:
-                    attackMultiplier = 1
-                timeRemainingAttackBoost -= 1
-
     if CollectItem:
         CollectItem = False
 
     clock.tick(60)
-
-# FIXME: Player sometimes goes one pixel into the wall. No clue what causes it, it appears to be random. Player cannot move in other axis until moving away from the wall.
-# FIXME: things can spawn in areas inaccessible to the player. this could just be an item or powerup that then cant be used, but it could also be an enemy, in which case the game can only be won with the wand.
-# FIXME: soldiers and wizards go 1 too far left and 2 too far right, which can cause many issues.
-
-# Todo: Save enemies, inventory, powerups, items, and health. (Is this needed?)
-# Todo: Optimise pathfinding (V2?)
-
-# Considerations for V2:
-# Add random player spawning
-# Make movement more smooth
-# Add doors
-# Add levels
-# Better pathfinding and enemy movement
-# Adjust sizing of assets
-# Add sprites/assets
-# Add more items
-# Enemy idle movement
-# Add difficulty settings
