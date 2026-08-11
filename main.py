@@ -8,7 +8,7 @@ from abc import ABC
 from enum import Enum
 from threading import Thread
 from typing import ClassVar
-import jsonpickle  # type: ignore[import-not-found]
+import jsonpickle  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
 import pathfinding  # type: ignore[import-untyped]
@@ -116,6 +116,7 @@ class GameState:
     enemies: list[Enemy]
     bullets_fired: list[Bullet]
     wand_magic_fired: list[WandMagicThing]
+    spawned_items: list[Item]
 
 
 class Entity(ABC):
@@ -129,11 +130,13 @@ class Entity(ABC):
         self.rect = rect
 
 
-@dataclasses.dataclass
-class Item(ABC):
-    location: pygame.Vector2
-    name: str
-    colour: tuple[int, int, int]
+class Item(Entity, ABC):
+    name: ClassVar[str]
+    colour: ClassVar[tuple[int, int, int]]
+
+    def __init__(self, location: pygame.Vector2):
+        super().__init__(1.0, location, pygame.Rect(((tileWidth) * (location[0])),
+                                   ((tileHeight) * (location[1])) + tileHeight - (screenHeight/30) + 1, (screenWidth/30), (screenHeight/30)))
 
 
 class Bullet(Entity):
@@ -168,7 +171,7 @@ class Weapon(Item, ABC):
     cooldown: int = 10
 
     def __init__(self, location: pygame.Vector2, strength: float = 1.0):
-        self.location = location
+        super().__init__(location)
         self.strength = strength
 
 
@@ -274,23 +277,24 @@ class Soldier(Enemy):
 
 enemy_types: list[type[Enemy]] = [Knight, Soldier, Wizard]
 
-
-class PowerupType(Enum):
-    SPEED_BOOST = 0
-    DAMAGE_BOOST = 1
-    HEALTH_BOOST = 2
-
-
-@dataclasses.dataclass
 class Powerup(Item):
-    type: PowerupType
 
+    def __init__(self, location: pygame.Vector2):
+        super().__init__(location)
 
-powerups: dict[PowerupType, tuple[str, tuple[int, int, int]]] = {
-    PowerupType.SPEED_BOOST: ("Increased Speed", (0, 0, 200)),
-    PowerupType.DAMAGE_BOOST: ("Damage x2", (0, 200, 200)),
-    PowerupType.HEALTH_BOOST: ("+20 Health", (200, 25, 25))
-}
+class SpeedBoost(Powerup):
+    name = "Increased Speed"
+    colour = (0, 0, 200)
+
+class DamageBoost(Powerup):
+    name = "Damage x2"
+    colour = (0, 200, 200)
+
+class HealthBoost(Powerup):
+    name = "+20 Health"
+    colour = (200, 25, 25)
+
+powerup_types: list[type[Powerup]] = [SpeedBoost, DamageBoost, HealthBoost]
 
 
 class Player(Entity):
@@ -423,29 +427,36 @@ def loadFile(file_name: str) -> None:
     # Output:
     #   Starts the game
 
-    global inGame, loadMenu, currentFile, tile_map, game_state_global, difficulty
+    global inGame, loadMenu, currentFile, tile_map, game_state_global, difficulty, health_boost_num
     inGame = True
     loadMenu = False
     currentFile = file_name
-    enemies: list[Enemy] = []
-    bullets_fired: list[Bullet] = []
-    wand_magic_fired: list[WandMagicThing] = []
 
     with open(f"gamesaves/{file_name}", "r") as file:
         save_data = jsonpickle.decode(file.read())
     if not isinstance(save_data, SaveFile):
         raise ValueError("Save file is improperly formatted")
 
-    if save_data.game_state is not None: game_state_global = save_data.game_state
-    else: game_state_global = GameState(Player(100, pygame.Vector2(90, -10), pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
-                                             screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
-                                             (screenHeight / 2) / 20), [None, None]), enemies, bullets_fired, wand_magic_fired)
-
     if save_data.map is not None: tile_map = save_data.map
     else: tile_map = generate_map(PresetMaps, 5, 5)
 
     if save_data.difficulty is not None: difficulty = save_data.difficulty
     else: difficulty = 1
+
+    isOnGround()
+
+    if save_data.game_state is not None: game_state_global = save_data.game_state
+    else:
+        game_state_global = GameState(Player(100, pygame.Vector2(90, -10), pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
+                                             screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
+                                             (screenHeight / 2) / 20), [None, None]), [], [], [], [])
+        for x in range(20):
+            game_state_global.spawned_items.append(spawn_item(Powerup))
+            game_state_global.spawned_items.append(spawn_item(Weapon))
+        if difficulty == 1: health_boost_num = 20
+        elif difficulty == 2: health_boost_num = 5
+
+    if not game_state_global.enemies: game_state_global.enemies = spawnEnemies(40)
 
     load_save(game_state_global)
 
@@ -611,21 +622,11 @@ def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y
 
 
 def load_save(game_state: GameState) -> None:
-    global enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, spawnedItems, gameLost, tile_map, tileRect, tile, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
+    global enemiesDefeated, difficulty, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, firstTimeRun, timeSinceGun, enemyPreviousPosition, TriggerNotUp, gameLost, tile_map, tileRect, tile, mapGenerated, cells, givePaths, pathTicks, enemiesToMove, grid, inThread, ButtonNotUp, mouseNotUp
     enemiesDefeated = False
     gameLost = False
     pathTicks = 0
-    spawnedItems = []
     enemiesToMove = []
-    isOnGround()
-    for x in range(20):
-        spawnedItems.append(spawn_item(Powerup))
-        spawnedItems.append(spawn_item(Weapon))
-    if difficulty == 1: health_boost_num = 10
-    elif difficulty == 2: health_boost_num = 5
-    for x in range(health_boost_num):
-        spawnedItems.append(spawn_item(Powerup, True))
-    if not game_state.enemies: game_state.enemies = spawnEnemies(40)
     enemyPreviousPosition = []
     for x in range(len(game_state.enemies)):
         enemyPreviousPosition.append(game_state.enemies[x].position)
@@ -661,7 +662,6 @@ pathfindingThread = Thread(target=do_pathfinding)
 
 @dataclasses.dataclass
 class RenderedElements:
-    items_rendered: dict[int, pygame.Rect]
     tiles_rendered: list[list[pygame.Rect]]
     inventory_background: pygame.Rect
 
@@ -681,19 +681,19 @@ def render_map(game_state: GameState, tile_map: list[list[tuple[int, int, int]]]
 def render_frame(game_state: GameState, tile_map, speed_boost_remaining, attack_boost_remaining) -> RenderedElements:
     screen.fill((50, 50, 50))
     tiles_rendered = render_map(game_state, tile_map)
-    items_rendered = render_items(game_state, spawnedItems)
+    render_items(game_state)
     render_enemies(game_state)
     pygame.draw.rect(screen, (0, 255, 0), game_state.player.rect)
     inventory_background = render_inventory(game_state)
     render_UI(game_state, speed_boost_remaining, attack_boost_remaining)
-    return RenderedElements(items_rendered, tiles_rendered, inventory_background)
+    return RenderedElements(tiles_rendered, inventory_background)
 
 
 def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
-    global pathfindingThread, enemiesDefeated, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, TriggerNotUp, spawnedItems, gameLost, tileRect, running, inThread, ButtonNotUp, mouseNotUp
+    global pathfindingThread, enemiesDefeated, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, TriggerNotUp, gameLost, tileRect, running, inThread, ButtonNotUp, mouseNotUp
 
     tileRect = render_data.tiles_rendered
-    if CollectItem: collect_item(game_state, spawnedItems, render_data.items_rendered)
+    if CollectItem: collect_item(game_state)
 
     if not pathfindingThread.is_alive():
         pathfindingThread = Thread(target=do_pathfinding, args=[game_state])
@@ -726,11 +726,11 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
         if isinstance(item, Weapon): item.time_since_attack += 1
 
     health_boost_num = sum(
-        1 for item in spawnedItems
-        if isinstance(item, Powerup) and item.type == PowerupType.HEALTH_BOOST
+        1 for item in game_state.spawned_items
+        if isinstance(item, HealthBoost)
     )
     if health_boost_num < 10 and timeSinceSpawnHealthBoosts >= 600:
-        spawnedItems.append(spawn_item(Powerup, True))
+        game_state.spawned_items.append(spawn_item(Powerup, True))
         timeSinceSpawnHealthBoosts = 0
     timeSinceSpawnHealthBoosts += 1
 
@@ -941,9 +941,6 @@ def manageBullets(given_state: GameState) -> None:
             break
 
 
-spawnedItems: list[Item] = []
-
-
 def spawn_item(item_type: type[Item], health_boost: bool = False) -> Item:
     # called when the game is started. spawns a random item.
     # Inputs:
@@ -952,83 +949,79 @@ def spawn_item(item_type: type[Item], health_boost: bool = False) -> Item:
     #   appends a weapon/powerup to the list of weapons/powerups spawned in a random location on the floor
     location = onGround[random.randint(0, len(onGround) - 1)]
     if item_type == Powerup:
-        powerup_type = PowerupType.HEALTH_BOOST if health_boost else random.choice(list(PowerupType))
-        item = powerups[powerup_type]
-        return Powerup(location, item[0], item[1], powerup_type)
+        powerup_type = HealthBoost if health_boost else random.choice(powerup_types)
+        return powerup_type(location)
     else:
         weapon_type: type[Weapon] = random.choice(weapon_types)
         return weapon_type(location)
 
 
-def collect_item(game_state: GameState, items: list[Item], items_rendered: dict[int, pygame.Rect]) -> None:
+def collect_item(game_state: GameState) -> None:
     global speed, attackMultiplier, timeRemainingSpeedBoost, timeRemainingAttackBoost
-    for x, item in reversed(list(enumerate(items))):
-        if not (abs(game_state.player.rect.x - items_rendered[x][0]) < 100 and abs(
-                game_state.player.rect.y - items_rendered[x][1]) < 100):
+    for x, item in reversed(list(enumerate(game_state.spawned_items))):
+        if not (abs(game_state.player.rect.x - item.rect[0]) < 100 and abs(
+                game_state.player.rect.y - item.rect[1]) < 100):
             continue
         if isinstance(item, Weapon):
             for i in range(len(game_state.player.inventory)):
                 if not game_state.player.inventory[i]:
                     game_state.player.inventory[i] = item
-                    items.remove(item)
+                    game_state.spawned_items.remove(item)
                     break
-        if type(item) == Powerup and item.type == PowerupType.SPEED_BOOST:
+        if isinstance(item, SpeedBoost):
             if speed != 400:
                 continue
             speed = 300
             timeRemainingSpeedBoost = 1000
-            items.remove(item)
+            game_state.spawned_items.remove(item)
             break
-        if type(item) == Powerup and item.type == PowerupType.DAMAGE_BOOST:
+        if isinstance(item, DamageBoost):
             if attackMultiplier != 1:
                 continue
             attackMultiplier = 2
             timeRemainingAttackBoost = 1000
-            items.remove(item)
+            game_state.spawned_items.remove(item)
             break
-        if type(item) == Powerup and item.type == PowerupType.HEALTH_BOOST:
+        if isinstance(item, HealthBoost):
             if game_state.player.health == 100:
                 continue
             if game_state.player.health < 80:
                 game_state.player.health += 20
             else:
                 game_state.player.health = 100
-            items.remove(item)
+            game_state.spawned_items.remove(item)
             break
 
 
-def render_items(game_state: GameState, items: list[Item]) -> dict[int, pygame.Rect]:
+def render_items(game_state: GameState) -> None:
     # Is called every frame. Shows the items on screen. If the player is close, it shows text saying the name of the item/powerup and tells the user to press E to pick up.
     # Input:
     #   items - array, the list of items to be rendered. It includes which item it is and where it is
     # Output:
     #   a bunch of pygame.Rects which are displayed on screen; the items.
     global speed, timeRemainingSpeedBoost, attackMultiplier, timeRemainingAttackBoost
-    itemsRendered: dict[int, pygame.Rect] = {}
     width = screenWidth / 30
     height = screenHeight / 30
-    for x, item in enumerate(items):
-        current_item = pygame.Rect(((tileWidth) * (item.location[0])) + game_state.player.position[0],
-                                   ((tileHeight) * (item.location[1])) + game_state.player.position[
+    for x, item in enumerate(game_state.spawned_items):
+        item.rect = pygame.Rect(((tileWidth) * (item.position[0])) + game_state.player.position[0],
+                                   ((tileHeight) * (item.position[1])) + game_state.player.position[
                                        1] + tileHeight - height + 1, width, height)
-        itemsRendered[x] = current_item
         if isinstance(item, Powerup):
-            pygame.draw.rect(screen, items[x].colour, current_item)
-            if item.type == PowerupType.HEALTH_BOOST:
+            pygame.draw.rect(screen, item.colour, item.rect)
+            if isinstance(item, HealthBoost):
                 enemyNameText = font2.render("+", True, (255, 255, 255))
-                enemyNameTextRect = enemyNameText.get_rect(center=(current_item.center[0], current_item.center[1]))
+                enemyNameTextRect = enemyNameText.get_rect(center=(item.rect.center[0], item.rect.center[1]))
                 screen.blit(enemyNameText, enemyNameTextRect)
         elif isinstance(item, Weapon):
-            pygame.draw.rect(screen, item.colour, current_item)
-        if abs(game_state.player.rect.x - current_item[0]) < 100 and abs(
-                game_state.player.rect.y - current_item[1]) < 100:
+            pygame.draw.rect(screen, item.colour, item.rect)
+        if abs(game_state.player.rect.x - item.rect[0]) < 100 and abs(
+                game_state.player.rect.y - item.rect[1]) < 100:
             itemText = font2.render(item.name, True, (30, 30, 30))
-            itemTextRect = itemText.get_rect(center=(current_item.center[0], current_item.center[1] - 20))
+            itemTextRect = itemText.get_rect(center=(item.rect.center[0], item.rect.center[1] - 20))
             itemText2 = font3.render("Press E to pick up", True, (30, 30, 30))
-            itemTextRect2 = itemText2.get_rect(center=(current_item.center[0], current_item.center[1] - 35))
+            itemTextRect2 = itemText2.get_rect(center=(item.rect.center[0], item.rect.center[1] - 35))
             screen.blit(itemText, itemTextRect)
             screen.blit(itemText2, itemTextRect2)
-    return itemsRendered
 
 
 def jump():
@@ -1132,9 +1125,9 @@ def render_inventory(game_state: GameState) -> pygame.Rect:
     current_item = game_state.player.inventory[itemSelected]
     current_item_pressed = inventory_slot_pressed[itemSelected]
     if (current_item_pressed or controller_drop_pressed) and current_item is not None:
-        current_item.location = pygame.Vector2(get_grid_pos(game_state.player.position)[0],
+        current_item.position = pygame.Vector2(get_grid_pos(game_state.player.position)[0],
                                                get_grid_pos(game_state.player.position)[1])
-        spawnedItems.append(current_item)
+        game_state.spawned_items.append(current_item)
         game_state.player.inventory[itemSelected] = None
         if pygame.mouse.get_pressed()[0]:
             mouseNotUp = True
