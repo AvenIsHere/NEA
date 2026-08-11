@@ -7,9 +7,8 @@ import sys
 from abc import ABC
 from enum import Enum
 from threading import Thread
-from typing import ClassVar
+from typing import ClassVar, Callable, Any
 import jsonpickle  # type: ignore[import-untyped]
-from pydantic import BaseModel
 
 import pathfinding  # type: ignore[import-untyped]
 import pygame
@@ -307,19 +306,31 @@ class Player(Entity):
         self.inventory = inventory
         self.powerups = []
 
+@dataclasses.dataclass
+class SaveFile:
+    difficulty: int | None
+    game_state: GameState | None
+
+difficulty_num = {
+    "Easy": 1,
+    "Normal": 2,
+    "Difficult": 3,
+    "Very Difficult": 4
+}
+
 
 inGame = False
 
 
-def button(text, position, size, colour, action=None, *args) -> None:
+def button(text: str, position: tuple[int, int], size: tuple[float, float], colour: tuple[int, int, int], action: Callable[..., Any] | None = None, *args: Any) -> None:
     global mouseNotUp
     button_rect = pygame.Rect(position[0] - (size[0] / 2), position[1] - (size[1] / 2), size[0],
                               size[1])  # creates a pygame Rect for the button
     pygame.draw.rect(screen, colour, button_rect)  # draws that rect onto the screen
-    text = font.render(text, True, (0, 0, 0))  # creates the text to write on the screen
-    textRect = text.get_rect(
+    rendered_text = font.render(text, True, (0, 0, 0))  # creates the text to write on the screen
+    textRect = rendered_text.get_rect(
         center=button_rect.center)  # creates a pygame rect for the text on the screen in the middle of the button
-    screen.blit(text, textRect)  # draws the text on the screen
+    screen.blit(rendered_text, textRect)  # draws the text on the screen
     if button_rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
         0] and mouseNotUp == False and action is not None:  # determines whether or not the button has been pressed
         action(*args)  # does the action associated with pressing the button
@@ -343,21 +354,21 @@ def menuEquals(menu_set: Menu) -> None:
     ButtonsListOffset = 0
 
 
-def drawTextBox(text, position, colour, borderColour, borderSize, typedText):
+def drawTextBox(text: str, position: tuple[int, int], colour: tuple[int, int, int], borderColour: tuple[int, int, int], borderSize: int, typedText: str) -> None:
     if typedText == '':
-        text = font.render(text, True, (0, 0, 0))
-        textRect = text.get_rect(center=position)
+        rendered_text = font.render(text, True, (0, 0, 0))
+        textRect = rendered_text.get_rect(center=position)
     else:
-        text = font.render(typedText, True, (0, 0, 0))
-        textRect = text.get_rect(center=position)
+        rendered_text = font.render(typedText, True, (0, 0, 0))
+        textRect = rendered_text.get_rect(center=position)
     pygame.draw.rect(screen, colour, textRect)
     pygame.draw.rect(screen, borderColour, (
         textRect.x - borderSize, textRect.y - borderSize, textRect.width + borderSize * 2,
         textRect.height + borderSize * 2), borderSize)
-    screen.blit(text, textRect)
+    screen.blit(rendered_text, textRect)
 
 
-def setDifficulty():
+def setDifficulty() -> None:
     global difficulty
     difficulties = {
         'Easy': 'Medium',
@@ -367,19 +378,7 @@ def setDifficulty():
     }
     difficulty = difficulties.get(difficulty, 'Easy')
 
-@dataclasses.dataclass
-class SaveFile:
-    difficulty: int | None
-    game_state: GameState | None
-
-difficulty_num = {
-    "Easy": 1,
-    "Normal": 2,
-    "Difficult": 3,
-    "Very Difficult": 4
-}
-
-def createFile():
+def createFile() -> None:
     global gameSaves
 
     save_data = SaveFile(difficulty=difficulty_num[difficulty], game_state=None)
@@ -484,7 +483,7 @@ def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Ve
     return pygame.Vector2((((screenWidth / 2) - position.x) / tileWidth), (((screenHeight / 2) - position.y) / tileHeight))
 
 
-def do_pathfinding(game_state: GameState):
+def do_pathfinding(game_state: GameState) -> None:
     global enemiesToMove, grid, pathGrid, pathTicks, onGroundMap
     if pathTicks == 0:
         enemiesToMove = []
@@ -698,11 +697,11 @@ def wonGame() -> None:
     button('Menu', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100), toMenu)
 
 
-def respawn():
+def respawn() -> None:
     loadFile(currentFile)
 
 
-def toMenu():
+def toMenu() -> None:
     global inGame, loadMenu
     menuEquals(Menu.MAIN)
     inGame = False
@@ -929,7 +928,7 @@ def render_items(game_state: GameState) -> None:
             screen.blit(itemText2, itemTextRect2)
 
 
-def jump(game_state: GameState):
+def jump(game_state: GameState) -> None:
     global jumpCount, jumping
     if jumpCount < 20:
         move = pygame.math.Vector2(0, -((screenWidth / 800) * (0.1 * jumpCount)) - gravity - (screenWidth / 800))
@@ -1039,7 +1038,7 @@ def render_inventory(game_state: GameState) -> pygame.Rect:
     return inventory_background
 
 
-def saveFile(game_state: GameState, file_name: str):
+def saveFile(game_state: GameState, file_name: str) -> None:
 
     save_file = SaveFile(difficulty=difficulty, game_state=game_state)
     with open(f"gamesaves/{file_name}", "w") as file:
@@ -1163,8 +1162,8 @@ while True:
 
         key = pygame.key.get_pressed()
 
-        left = 0
-        right = 0
+        left: float = 0
+        right: float = 0
 
         for x in range(len(joysticks)):
             if joysticks[x].get_axis(0) > 0.25:
