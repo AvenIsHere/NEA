@@ -44,7 +44,6 @@ screenHeight = screen.get_height()
 tileWidth = screenWidth / 20
 tileHeight = screenHeight / 20
 PresetMaps = [
-    # the maps used in the game. "-" is the floors/walls (where the player cant pass through), and " " is empty space, where the player can pass through.
     ['-----------   -',
      '              -',
      '   --         -',
@@ -117,6 +116,7 @@ class GameState:
     bullets_fired: list[Bullet]
     wand_magic_fired: list[WandMagicThing]
     spawned_items: list[Item]
+    tile_map: list[list[tuple[int, int, int]]]
 
 
 class Entity(ABC):
@@ -312,16 +312,6 @@ inGame = False
 
 
 def button(text, position, size, colour, action=None, *args) -> None:
-    # draws a button on screen with optional function
-    # input:
-    #   text - string, determines what text will appear on the button
-    #   position - tuple/array, determines where the button will be placed on the screen
-    #   size - tuple/array, determines the size of the button
-    #   colour - tuple, determines the colour of the button
-    #   action (optional) - function name, determines which function (if any) is called when the button is clicked
-    #   *args (optional) - any, arguments that are passed through to the function called when the button is pressed
-    # output:
-    #   This function displays a button on screen. It shows text on the button, and may also do something when clicked.
     global mouseNotUp
     button_rect = pygame.Rect(position[0] - (size[0] / 2), position[1] - (size[1] / 2), size[0],
                               size[1])  # creates a pygame Rect for the button
@@ -336,12 +326,6 @@ def button(text, position, size, colour, action=None, *args) -> None:
         mouseNotUp = True
 
 def menuEquals(menu_set: Menu) -> None:
-    # Changes current menu to the menu in the input menu_set.
-    # This function exists due to the way the button function works. Buttons can only call a function, so a function must be made to change a variable.
-    # input:
-    #   menu_set - string, determines which menu will be displayed.
-    # output:
-    #   menu - string, used in the menu function to display the correct menu
     global menu
     global difficulty
     global typedText
@@ -360,17 +344,6 @@ def menuEquals(menu_set: Menu) -> None:
 
 
 def drawTextBox(text, position, colour, borderColour, borderSize, typedText):
-    # draws a text box that the user can type into. This is used in the file creation screen so that the user can type the name of the file.
-    # Input:
-    #   text - string, the default text to be displayed when nothing has been typed
-    #   position - tuple, determines the position of the text box
-    #   size - tuple/array, was planned to determine the size of the text box, currently unused.
-    #   colour - tuple, determines the colour of the text box
-    #   borderColour - tuple, determines the colour of the border
-    #   borderSize - tuple/array, determines the size of the border
-    #   typedText - string, the text that has been typed and will be displayed in the text box, if any.
-    # Output:
-    #   displays a text box on the screen
     if typedText == '':
         text = font.render(text, True, (0, 0, 0))
         textRect = text.get_rect(center=position)
@@ -385,9 +358,6 @@ def drawTextBox(text, position, colour, borderColour, borderSize, typedText):
 
 
 def setDifficulty():
-    # changes the difficulty in the create file menu
-    # Exists due to how the button function works
-    # When the difficulty button is pressed in the create file menu, this function changes the difficulty of the file
     global difficulty
     difficulties = {
         'Easy': 'Medium',
@@ -401,7 +371,6 @@ def setDifficulty():
 class SaveFile:
     difficulty: int | None
     game_state: GameState | None
-    map: list[list[tuple[int, int, int]]] | None
 
 difficulty_num = {
     "Easy": 1,
@@ -413,7 +382,7 @@ difficulty_num = {
 def createFile():
     global gameSaves
 
-    save_data = SaveFile(difficulty=difficulty_num[difficulty], game_state=None, map=None)
+    save_data = SaveFile(difficulty=difficulty_num[difficulty], game_state=None)
     with open(f"gamesaves/{typedText}.json", "w") as file:
         file.write(jsonpickle.encode(save_data))
 
@@ -424,13 +393,8 @@ game_state_global = None
 
 
 def loadFile(file_name: str) -> None:
-    # loads the chosen game file. This function closes the main menu and starts the game
-    # Input:
-    #   file - string, determines which file is loaded
-    # Output:
-    #   Starts the game
 
-    global inGame, loadMenu, currentFile, tile_map, game_state_global, difficulty, health_boost_num, pathTicks
+    global inGame, loadMenu, currentFile, game_state_global, difficulty, health_boost_num, pathTicks
     inGame = True
     loadMenu = False
     currentFile = file_name
@@ -440,18 +404,18 @@ def loadFile(file_name: str) -> None:
     if not isinstance(save_data, SaveFile):
         raise ValueError("Save file is improperly formatted")
 
-    if save_data.map is not None: tile_map = save_data.map
-    else: tile_map = generate_map(PresetMaps, 5, 5)
-    isOnGround()
-
     if save_data.difficulty is not None: difficulty = save_data.difficulty
     else: difficulty = 1
 
-    if save_data.game_state is not None: game_state_global = save_data.game_state
+    if save_data.game_state is not None:
+        game_state_global = save_data.game_state
+        isOnGround(game_state_global.tile_map)
     else:
+        tile_map = generate_map(PresetMaps, 5, 5)
+        isOnGround(tile_map)
         game_state_global = GameState(Player(100, pygame.Vector2(90, -10), pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
                                              screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
-                                             (screenHeight / 2) / 20), [None, None]), [], [], [], [])
+                                             (screenHeight / 2) / 20), [None, None]), [], [], [], [], tile_map)
         for x in range(20):
             game_state_global.spawned_items.append(spawn_item(Powerup))
             game_state_global.spawned_items.append(spawn_item(Weapon))
@@ -463,12 +427,6 @@ def loadFile(file_name: str) -> None:
     pathTicks = 0
 
 def mainMenu(menu: Menu) -> None:
-    # Shows and handles almost everything related to the main menu
-    # It determines which buttons to show, then displays them on the screen.
-    # Input:
-    #   menu - string, controls which menu is currently showing
-    # Output:
-    #   displays the current menu on the screen
     global menuNameTextRect
     global buttonsList
     menuNameMap = {
@@ -527,10 +485,6 @@ def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Ve
 
 
 def do_pathfinding(game_state: GameState):
-    # Determines if the enemies should be moving.
-    # for each enemy, it finds the players position, the enemies position, the possible paths that can be taken, and finally whether a path exists between the enemy and the player
-    # It then moves the enemy in the direction of the player (or away, if that is what the pathfinding finds) if a path was found.
-    # A new path for each enemy is only generated every 50 frames, however the enemy is moved every frame.
     global enemiesToMove, grid, pathGrid, pathTicks, onGroundMap
     if pathTicks == 0:
         enemiesToMove = []
@@ -650,9 +604,9 @@ class RenderedElements:
     inventory_background: pygame.Rect
 
 
-def render_map(game_state: GameState, tile_map: list[list[tuple[int, int, int]]]) -> list[list[pygame.Rect]]:
+def render_map(game_state: GameState) -> list[list[pygame.Rect]]:
     tiles_rendered: list[list[pygame.Rect]] = []
-    for x, colour in enumerate(tile_map, start=0):
+    for x, colour in enumerate(game_state.tile_map, start=0):
         tiles_rendered.append([])
         for y, tileColour in enumerate(colour, start=0):
             tiles_rendered[x].append(pygame.Rect(((tileWidth) * (x)) + game_state.player.position[0],
@@ -662,9 +616,9 @@ def render_map(game_state: GameState, tile_map: list[list[tuple[int, int, int]]]
     return tiles_rendered
 
 
-def render_frame(game_state: GameState, tile_map) -> RenderedElements:
+def render_frame(game_state: GameState) -> RenderedElements:
     screen.fill((50, 50, 50))
-    tiles_rendered = render_map(game_state, tile_map)
+    tiles_rendered = render_map(game_state)
     render_items(game_state)
     render_enemies(game_state)
     pygame.draw.rect(screen, (0, 255, 0), game_state.player.rect)
@@ -724,7 +678,6 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
 
 
 def lostGame() -> None:
-    # If the player has died, this function is called and displays this screen which creates a gray translucent background, and displays "GAME OVER!" and two buttons to respawn or go to the menu.
     lostGameRect = pygame.Rect(0, 0, screenWidth, screenHeight)
     draw_rect_alpha(screen, (50, 50, 50, 128), lostGameRect)
     lostGameText = font.render("GAME OVER!", True, (255, 0, 0))
@@ -735,7 +688,6 @@ def lostGame() -> None:
 
 
 def wonGame() -> None:
-    # If the player has killed all enemies (and therefore won), this function is called and displays this screen which creates a gray translucent background, and displays "YOU WON!" and two buttons to play again or go to the menu.
     lostGameRect = pygame.Rect(0, 0, screenWidth, screenHeight)
     draw_rect_alpha(screen, (50, 50, 50, 128), lostGameRect)
     lostGameText = font.render("YOU WON!", True, (255, 0, 0))
@@ -751,7 +703,6 @@ def respawn():
 
 
 def toMenu():
-    # takes the user back to the main menu. This function is called when the player presses the button to go to the menu on the game over screen.
     global inGame, loadMenu
     menuEquals(Menu.MAIN)
     inGame = False
@@ -770,14 +721,6 @@ attackStrength = random.randint(6, 9)
 
 
 def attack(game_state: GameState, origin: Player | Enemy, controller: bool = False) -> None:
-    # called when the player or an enemy uses a weapon. Checks to see who fired the weapon, which weapon was used and whether the player is close enough to use the weapon.
-    # If all conditions are met, it then either lowers the enemy/player health (if it is a sword being used) or spawns a bullet/magic
-    # Input:
-    #   weaponType - string, determines which weapon is being used (sword, gun, wand)
-    #   origin - integer (if it is an enemy) or pygame.Rect (if it is the player), determines who fired the weapon
-    # Output:
-    #   if it is a gun or wand being fired, it appends to the wandFired or bulletsFired array
-
     if isinstance(origin, Player):
         weapon = origin.inventory[itemSelected]
         if not isinstance(weapon, Weapon): raise RuntimeError("Player attempted to attack with powerup")
@@ -824,8 +767,6 @@ def attack(game_state: GameState, origin: Player | Enemy, controller: bool = Fal
 
 
 def manageBullets(given_state: GameState) -> None:
-    # is called every frame.
-    # manages any current bullets; moves them, checks if they are colliding with an enemy/the player (if it is, it reduces the health of the player/enemy and removes the bullet), checks if it has been alive too long (if it is magic), checks if it has collided with any walls (if it is a bullet. if so, it removes it)
     breakForLoop = False
     for magic in given_state.wand_magic_fired:
         if isinstance(magic.target, Player):
@@ -900,7 +841,7 @@ def manageBullets(given_state: GameState) -> None:
         for y, tileRectRow in enumerate(tileRect):
             for z, tileRectRowColumn in enumerate(tileRectRow):
                 if bulletSurfaceRect.colliderect(tileRect[y][z]) and (
-                        tile_map[y][z] == GRID_COLOR or tile_map[y][z] == WALL_COLOR or tile_map[y][
+                        given_state.tile_map[y][z] == GRID_COLOR or given_state.tile_map[y][z] == WALL_COLOR or given_state.tile_map[y][
                     z] == FLOOR_NEXT_COL):
                     given_state.bullets_fired.remove(bullet)
                     breakForLoop = True
@@ -925,11 +866,6 @@ def manageBullets(given_state: GameState) -> None:
 
 
 def spawn_item(item_type: type[Item], health_boost: bool = False) -> Item:
-    # called when the game is started. spawns a random item.
-    # Inputs:
-    #   type - string, determines whether it is a weapon or a powerup that is spawned.
-    # Outputs:
-    #   appends a weapon/powerup to the list of weapons/powerups spawned in a random location on the floor
     location = onGround[random.randint(0, len(onGround) - 1)]
     if item_type == Powerup:
         powerup_type = HealthBoost if health_boost else random.choice(powerup_types)
@@ -969,11 +905,6 @@ def collect_item(game_state: GameState) -> None:
 
 
 def render_items(game_state: GameState) -> None:
-    # Is called every frame. Shows the items on screen. If the player is close, it shows text saying the name of the item/powerup and tells the user to press E to pick up.
-    # Input:
-    #   items - array, the list of items to be rendered. It includes which item it is and where it is
-    # Output:
-    #   a bunch of pygame.Rects which are displayed on screen; the items.
     width = screenWidth / 30
     height = screenHeight / 30
     for x, item in enumerate(game_state.spawned_items):
@@ -998,19 +929,17 @@ def render_items(game_state: GameState) -> None:
             screen.blit(itemText2, itemTextRect2)
 
 
-def jump():
-    # Is called when the player jumps
-    # calculates the player movement up and down when jumping, as well as stopping the jump when landing by checking if the player is colliding with anything below.
+def jump(game_state: GameState):
     global jumpCount, jumping
     if jumpCount < 20:
         move = pygame.math.Vector2(0, -((screenWidth / 800) * (0.1 * jumpCount)) - gravity - (screenWidth / 800))
     else:
         move = pygame.math.Vector2(0, -(screenWidth / 600) - gravity - (screenWidth / 800))
-    nextPlayer_y = game_state_global.player.rect.move(0, move.y)
+    nextPlayer_y = game_state.player.rect.move(0, move.y)
     for x, tileRectRow in enumerate(tileRect):
         for y, tileRectRowColumn in enumerate(tileRectRow):
             if nextPlayer_y.colliderect(tileRect[x][y]) and (
-                    tile_map[x][y] == GRID_COLOR or tile_map[x][y] == WALL_COLOR or tile_map[x][
+                    game_state.tile_map[x][y] == GRID_COLOR or game_state.tile_map[x][y] == WALL_COLOR or game_state.tile_map[x][
                 y] == FLOOR_NEXT_COL) and tileRect[x][y].top < nextPlayer_y.top:
                 if move.y > 0:  # moving down
                     move.y = 0
@@ -1018,17 +947,17 @@ def jump():
                     move.y = 0
                 break
 
-    if game_state_global.player.position[1] <= -1776:
+    if game_state.player.position[1] <= -1776:
         if move.y > 0:
             move.y = 0
-        game_state_global.player.position[1] = -1776
+        game_state.player.position[1] = -1776
 
-    if game_state_global.player.position[1] >= 315.2:
+    if game_state.player.position[1] >= 315.2:
         if move.y < 0:
             move.y = 0
-        game_state_global.player.position[1] = 315.2
+        game_state.player.position[1] = 315.2
 
-    game_state_global.player.position[1] -= move.y
+    game_state.player.position[1] -= move.y
     jumpCount += 1
 
 
@@ -1041,10 +970,6 @@ def new_weapon(location: pygame.Vector2, weapon_type: type[Weapon] | None = None
 
 
 def spawnEnemies(number: int) -> list[Enemy]:
-    # called at the beginning of the game. spawns 40 enemies.
-    # makes sure they are on the ground and not in a wall
-    # Output:
-    #   appends a random enemy and its location to game_state.enemies
     return_enemies: list[Enemy] = []
     for x in range(number):
         location = onGround[random.randint(0, len(onGround) - 1)]
@@ -1062,10 +987,6 @@ itemSelected = 0
 
 
 def render_inventory(game_state: GameState) -> pygame.Rect:
-    # shows the inventory at the bottom of the screen. shows which item is currently selected, and checks to see if either inventory slot is clicked
-    # If an inventory slot is clicked, if it is the currently selected slot, it drops the item in the slot, if not, it switches to that item
-    # Output:
-    #   some rects which are displayed and show the inventory and items
     global itemSelected, mouseNotUp, ButtonNotUp
 
     inventory_background = pygame.Rect((screenWidth / 2) - (50 * len(game_state.player.inventory)), screenHeight - 100,
@@ -1120,7 +1041,7 @@ def render_inventory(game_state: GameState) -> pygame.Rect:
 
 def saveFile(game_state: GameState, file_name: str):
 
-    save_file = SaveFile(difficulty=difficulty, map=tile_map, game_state=game_state)
+    save_file = SaveFile(difficulty=difficulty, game_state=game_state)
     with open(f"gamesaves/{file_name}", "w") as file:
         file.write(jsonpickle.encode(save_file))
 
@@ -1128,7 +1049,7 @@ def saveFile(game_state: GameState, file_name: str):
 CollectItem = False
 
 
-def isOnGround():
+def isOnGround(tile_map: list[list[tuple[int, int, int]]]) -> None:
     global onGround, onGroundMap
     onGround = []
     for x in range(len(tile_map)):
@@ -1235,7 +1156,7 @@ while True:
     keys = pygame.key.get_pressed()
 
     if inGame:
-        render_data = render_frame(game_state_global, tile_map)
+        render_data = render_frame(game_state_global)
         if game_state_global.player.health <= 0: lostGame()
         elif not game_state_global.enemies: wonGame()
         else: game_frame(game_state_global, render_data)
@@ -1270,7 +1191,7 @@ while True:
 
         if not game_state_global.player.health <= 0:
             if jumping:
-                jump()
+                jump(game_state_global)
 
             move = pygame.math.Vector2(right - left, 0)
             if not jumping:
@@ -1283,7 +1204,7 @@ while True:
                 for x, tileRectRow in enumerate(tileRect):
                     for y, tileRectRowColumn in enumerate(tileRectRow):
                         if nextPlayer_x.colliderect(tileRect[x][y]) and (
-                                tile_map[x][y] == GRID_COLOR or tile_map[x][y] == WALL_COLOR or tile_map[x][
+                                game_state_global.tile_map[x][y] == GRID_COLOR or game_state_global.tile_map[x][y] == WALL_COLOR or game_state_global.tile_map[x][
                             y] == FLOOR_NEXT_COL):
                             if move.x > 0:  # moving right
                                 move.x = 0
@@ -1295,7 +1216,7 @@ while True:
                 for x, tileRectRow in enumerate(tileRect):
                     for y, tileRectRowColumn in enumerate(tileRectRow):
                         if nextPlayer_y.colliderect(tileRect[x][y]) and (
-                                tile_map[x][y] == GRID_COLOR or tile_map[x][y] == WALL_COLOR or tile_map[x][
+                                game_state_global.tile_map[x][y] == GRID_COLOR or game_state_global.tile_map[x][y] == WALL_COLOR or game_state_global.tile_map[x][
                             y] == FLOOR_NEXT_COL):
                             if move.y > 0:  # moving down
                                 move.y = 0
