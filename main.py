@@ -1,13 +1,11 @@
+# main.py
+
 # importing different libraries
 import dataclasses
 import math
-import os
 import random
 import sys
-from abc import ABC
-from enum import Enum
 from threading import Thread
-from typing import ClassVar, Callable, Any
 import jsonpickle  # type: ignore[import-untyped]
 
 import pathfinding  # type: ignore[import-untyped]
@@ -17,6 +15,13 @@ from pathfinding.core.grid import Grid  # type: ignore[import-untyped]
 from pathfinding.finder.a_star import AStarFinder  # type: ignore[import-untyped]
 from pygame.locals import QUIT
 
+from consts import font2, font, font3, screen_width, tileWidth, screen_height, tileHeight, GRID_COLOR, WALL_COLOR, \
+    FLOOR_NEXT_COL, gravity
+from file import GameFile, save_game
+from game import get_ground_map, get_ground_tiles, GameState, Wizard, Knight, Weapon, HealthBoost, Powerup, Player, \
+    Enemy, Gun, DamageBoost, Sword, Wand, Item, powerup_types, weapon_types, enemy_types, SpeedBoost
+from menu import MainMenu, Button
+
 pygame.init()
 pygame.joystick.init()
 joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
@@ -24,292 +29,11 @@ joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_coun
 # defining different variables
 screen = pygame.display.set_mode((1152, 648))
 pygame.display.set_caption('NEA')
-font = pygame.font.Font(None, 32)
-font2 = pygame.font.Font(None, 24)
-font3 = pygame.font.Font(None, 12)
 
-loadMenu = True
 ButtonsListOffset = 0
 mouseNotUp = False
 ButtonNotUp = False
 TriggerNotUp = False
-WALL_COLOR = (50, 50, 50)
-GRID_COLOR = (0, 0, 0)
-FLOOR_COLOR = (255, 255, 255)
-FLOOR_NEXT_COL = (0, 0, 255)
-gravity = -1.5
-screenWidth = screen.get_width()
-screenHeight = screen.get_height()
-tileWidth = screenWidth / 20
-tileHeight = screenHeight / 20
-PresetMaps = [
-    ['-----------   -',
-     '              -',
-     '   --         -',
-     '-       -------',
-     '-              ',
-     '----           ',
-     '-----   --     ',
-     '               ',
-     '   -----      -',
-     '              -',
-     '             --',
-     '             --',
-     '---      ------'],
-
-    ['------    -----',
-     '------   ------',
-     '-         -----',
-     '-       -------',
-     '     --     ---',
-     '              -',
-     '  ----  ---   -',
-     '              -',
-     '-      ---     ',
-     '              -',
-     '------   ------',
-     '-------  ------',
-     '------    -----'],
-
-    ['        -----  ',
-     '       -----   ',
-     '       ----    ',
-     '       -----   ',
-     '  -------      ',
-     '   ------      ',
-     '              -',
-     '              -',
-     '             --',
-     '-     ---   ---',
-     '            ---',
-     '     ---  - ---',
-     '    -----------'],
-
-    ['--   --   ---  ',
-     ' --  ---   ----',
-     '    ----   ----',
-     '              -',
-     '----           ',
-     '               ',
-     '-  ------      ',
-     '  --    -      ',
-     '      ----     ',
-     '-             -',
-     '-  ----     ---',
-     '---------  ----',
-     '-------     ---']
-]
-
-class Menu(Enum):
-    MAIN = 0
-    NEW = 1
-    PLAY = 2
-    SETTINGS = 3
-
-menu: Menu = Menu.MAIN
-
-@dataclasses.dataclass
-class GameState:
-    player: Player
-    enemies: list[Enemy]
-    bullets_fired: list[Bullet]
-    wand_magic_fired: list[WandMagicThing]
-    spawned_items: list[Item]
-    tile_map: list[list[tuple[int, int, int]]]
-
-
-class Entity(ABC):
-    health: float
-    position: pygame.Vector2
-    rect: pygame.Rect
-
-    def __init__(self, health: float, position: pygame.Vector2, rect: pygame.Rect):
-        self.health = health
-        self.position = position
-        self.rect = rect
-
-
-class Item(Entity, ABC):
-    name: ClassVar[str]
-    colour: ClassVar[tuple[int, int, int]]
-
-    def __init__(self, location: pygame.Vector2):
-        super().__init__(1.0, location, pygame.Rect(((tileWidth) * (location[0])),
-                                   ((tileHeight) * (location[1])) + tileHeight - (screenHeight/30) + 1, (screenWidth/30), (screenHeight/30)))
-
-
-class Bullet(Entity):
-    direction: float
-    damage: float
-    shot_by: Entity
-
-    def __init__(self, position: pygame.Vector2, direction: float, damage: float, shot_by: Entity):
-        super().__init__(0.1, position, pygame.Rect(0, 0, 10, 10))
-        self.direction = direction
-        self.damage = damage
-        self.shot_by = shot_by
-
-
-@dataclasses.dataclass
-class WandMagicThing(Entity):
-    age: int
-    target: Entity
-    damage: float
-
-    def __init__(self, position: pygame.Vector2, age: int, target: Entity, damage: float):
-        super().__init__(0.1, position, pygame.Rect(((tileWidth) * (position[0])), ((tileHeight) * (position[1])),
-                                                    target.rect.width / 4, target.rect.width / 4))
-        self.age = age
-        self.target = target
-        self.damage = damage
-
-
-class Weapon(Item, ABC):
-    strength: float
-    time_since_attack: int = 0
-    cooldown: int = 10
-
-    def __init__(self, location: pygame.Vector2, strength: float = 1.0):
-        super().__init__(location)
-        self.strength = strength
-
-
-class Sword(Weapon):
-    name = "Sword"
-    colour = (200, 200, 0)
-
-    def attack(self, target: Entity, attack_multiplier: float = 1) -> None:
-        if self.time_since_attack <= self.cooldown:
-            return
-
-        target.health -= self.strength * attack_multiplier
-        self.cooldown = random.randint(25, 40)
-
-        self.time_since_attack = 0
-
-
-class Gun(Weapon):
-    name = "Gun"
-    colour = (0, 200, 0)
-
-    def shoot(self, given_state: GameState, shot_by: Entity, location: pygame.Vector2, direction: float,
-              attack_multiplier: float = 1) -> None:
-        if self.time_since_attack <= self.cooldown:
-            return
-
-        given_state.bullets_fired.append(Bullet(location, direction, self.strength * attack_multiplier, shot_by))
-        self.cooldown = random.randint(10, 15)
-
-        self.time_since_attack = 0
-
-
-class Wand(Weapon):
-    name = "Wand"
-    colour = (100, 255, 255)
-
-    def fire(self, given_state: GameState, target: Entity, location: pygame.Vector2, attack_multiplier: float = 1) -> None:
-        if self.time_since_attack <= self.cooldown:
-            return
-
-        given_state.wand_magic_fired.append(WandMagicThing(location, 0, target, self.strength * attack_multiplier))
-        self.cooldown = random.randint(100, 150)
-
-        self.time_since_attack = 0
-
-
-weapon_types: list[type[Weapon]] = [Sword, Gun, Wand]
-
-
-class Enemy(Entity, ABC):
-    name: str
-    initial: str
-    colour: tuple[int, int, int]
-    weapon: Weapon
-    weapon_type: ClassVar[type[Weapon]]
-
-    def __init__(self, health: int, location: pygame.Vector2):
-        super().__init__(health, location, pygame.Rect((tileWidth * (location[0])),
-                                                       (tileHeight * (location[1])) + tileHeight - (
-                                                               screenHeight / 30) + 1,
-                                                       screenWidth / 30, screenHeight / 30))
-        self.weapon = new_weapon(location, self.weapon_type)
-
-    def render(self, game_state: GameState) -> None:
-        self.rect = pygame.Rect(
-            (tileWidth * (self.position[0])) + game_state.player.position[0],
-            (tileHeight * (self.position[1])) + game_state.player.position[1] + tileHeight - (
-                    screenHeight / 30) + 1,
-            screenWidth / 30, screenHeight / 30)
-        pygame.draw.rect(screen, self.colour, self.rect)
-        if abs(self.rect.x - game_state.player.rect.x) < 100 and abs(
-                self.rect.y - game_state.player.rect.y) < 100:
-            enemyHealthText = font2.render(str(self.health), True, (30, 30, 30))
-            enemyHealthTextRect = enemyHealthText.get_rect(
-                center=(self.rect.center[0], self.rect.center[1] - 20))
-            screen.blit(enemyHealthText, enemyHealthTextRect)
-        enemyNameText = font2.render(self.initial, True, (30, 30, 30))
-        enemyNameTextRect = enemyNameText.get_rect(
-            center=(self.rect.center[0], self.rect.center[1]))
-        screen.blit(enemyNameText, enemyNameTextRect)
-
-
-class Knight(Enemy):
-    weapon_type = Sword
-    name = "Knight"
-    initial = "K"
-    colour = (200, 75, 0)
-
-
-class Wizard(Enemy):
-    weapon_type = Wand
-    name = "Wizard"
-    initial = "W"
-    colour = (200, 0, 75)
-
-
-class Soldier(Enemy):
-    weapon_type = Gun
-    name = "Soldier"
-    initial = "S"
-    colour = (0, 0, 100)
-
-
-enemy_types: list[type[Enemy]] = [Knight, Soldier, Wizard]
-
-class Powerup(Item):
-    time_remaining: int = 1000
-
-    def __init__(self, location: pygame.Vector2):
-        super().__init__(location)
-
-class SpeedBoost(Powerup):
-    name = "Increased Speed"
-    colour = (0, 0, 200)
-
-class DamageBoost(Powerup):
-    name = "Damage x2"
-    colour = (0, 200, 200)
-
-class HealthBoost(Powerup):
-    name = "+20 Health"
-    colour = (200, 25, 25)
-
-powerup_types: list[type[Powerup]] = [SpeedBoost, DamageBoost, HealthBoost]
-
-
-class Player(Entity):
-    inventory: list[Item | None]
-    powerups: list[Powerup]
-
-    def __init__(self, health: float, position: pygame.Vector2, rect: pygame.Rect, inventory: list[Item | None]):
-        super().__init__(health, position, rect)
-        self.inventory = inventory
-        self.powerups = []
-
-@dataclasses.dataclass
-class SaveFile:
-    difficulty: int | None
-    game_state: GameState | None
 
 difficulty_num = {
     "Easy": 1,
@@ -318,169 +42,11 @@ difficulty_num = {
     "Very Difficult": 4
 }
 
-
-inGame = False
-
-
-def button(text: str, position: tuple[int, int], size: tuple[float, float], colour: tuple[int, int, int], action: Callable[..., Any] | None = None, *args: Any) -> None:
-    global mouseNotUp
-    button_rect = pygame.Rect(position[0] - (size[0] / 2), position[1] - (size[1] / 2), size[0],
-                              size[1])  # creates a pygame Rect for the button
-    pygame.draw.rect(screen, colour, button_rect)  # draws that rect onto the screen
-    rendered_text = font.render(text, True, (0, 0, 0))  # creates the text to write on the screen
-    textRect = rendered_text.get_rect(
-        center=button_rect.center)  # creates a pygame rect for the text on the screen in the middle of the button
-    screen.blit(rendered_text, textRect)  # draws the text on the screen
-    if button_rect.collidepoint(pygame.mouse.get_pos()) and pygame.mouse.get_pressed()[
-        0] and mouseNotUp == False and action is not None:  # determines whether or not the button has been pressed
-        action(*args)  # does the action associated with pressing the button
-        mouseNotUp = True
-
-def menuEquals(menu_set: Menu) -> None:
-    global menu
-    global difficulty
-    global typedText
-    global ButtonsListOffset
-    menu = menu_set
-    if menu == Menu.NEW:
-        difficulty = 'Easy'
-        typedText = ''
-    if menu == Menu.PLAY:
-        if os.path.isdir('gamesaves'):
-            global gameSaves
-            gameSaves = os.listdir('gamesaves')
-        else:
-            os.mkdir('gamesaves')
-    ButtonsListOffset = 0
-
-
-def drawTextBox(text: str, position: tuple[int, int], colour: tuple[int, int, int], borderColour: tuple[int, int, int], borderSize: int, typedText: str) -> None:
-    if typedText == '':
-        rendered_text = font.render(text, True, (0, 0, 0))
-        textRect = rendered_text.get_rect(center=position)
-    else:
-        rendered_text = font.render(typedText, True, (0, 0, 0))
-        textRect = rendered_text.get_rect(center=position)
-    pygame.draw.rect(screen, colour, textRect)
-    pygame.draw.rect(screen, borderColour, (
-        textRect.x - borderSize, textRect.y - borderSize, textRect.width + borderSize * 2,
-        textRect.height + borderSize * 2), borderSize)
-    screen.blit(rendered_text, textRect)
-
-
-def setDifficulty() -> None:
-    global difficulty
-    difficulties = {
-        'Easy': 'Medium',
-        'Medium': 'Difficult',
-        'Difficult': 'Very difficult',
-        'Very difficult': 'Easy'
-    }
-    difficulty = difficulties.get(difficulty, 'Easy')
-
-def createFile() -> None:
-    global gameSaves
-
-    save_data = SaveFile(difficulty=difficulty_num[difficulty], game_state=None)
-    with open(f"gamesaves/{typedText}.json", "w") as file:
-        file.write(jsonpickle.encode(save_data))
-
-    gameSaves = os.listdir('gamesaves')
-
-
-game_state_global = None
-
-
-def loadFile(file_name: str) -> None:
-
-    global inGame, loadMenu, currentFile, game_state_global, difficulty, health_boost_num, pathTicks
-    inGame = True
-    loadMenu = False
-    currentFile = file_name
-
-    with open(f"gamesaves/{file_name}", "r") as file:
-        save_data = jsonpickle.decode(file.read())
-    if not isinstance(save_data, SaveFile):
-        raise ValueError("Save file is improperly formatted")
-
-    if save_data.difficulty is not None: difficulty = save_data.difficulty
-    else: difficulty = 1
-
-    if save_data.game_state is not None:
-        game_state_global = save_data.game_state
-        isOnGround(game_state_global.tile_map)
-    else:
-        tile_map = generate_map(PresetMaps, 5, 5)
-        isOnGround(tile_map)
-        game_state_global = GameState(Player(100, pygame.Vector2(90, -10), pygame.Rect(screenWidth / 2 - (screenWidth / 2) / 40,
-                                             screenHeight / 2 - (screenHeight / 2) / 40, (screenWidth / 2) / 20,
-                                             (screenHeight / 2) / 20), [None, None]), [], [], [], [], tile_map)
-        for x in range(20):
-            game_state_global.spawned_items.append(spawn_item(Powerup))
-            game_state_global.spawned_items.append(spawn_item(Weapon))
-        if difficulty == 1: health_boost_num = 20
-        elif difficulty == 2: health_boost_num = 5
-
-    if not game_state_global.enemies: game_state_global.enemies = spawnEnemies(40)
-
-    pathTicks = 0
-
-def mainMenu(menu: Menu) -> None:
-    global menuNameTextRect
-    global buttonsList
-    menuNameMap = {
-        Menu.MAIN: "Game Name",
-        Menu.PLAY: "Game Name",
-        Menu.SETTINGS: "Settings",
-        Menu.NEW: "New Game",
-    }
-    menuNameText = font.render(menuNameMap[menu], True, (255, 255, 255))
-    menuNameTextRect = menuNameText.get_rect(center=(screenWidth / 2, screenHeight / 6))
-    if menu == Menu.MAIN:
-        buttonsList = [['Play', menuEquals, Menu.PLAY], ['Settings', menuEquals, Menu.SETTINGS], ['Quit', pygame.quit]]
-    elif menu == Menu.SETTINGS:
-        buttonsList = []
-        button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100),
-               menuEquals, Menu.MAIN)
-    elif menu == Menu.PLAY:
-        buttonsList = [['New Game', menuEquals, Menu.NEW]]
-        for savefile in gameSaves:
-            buttonsList.append([savefile[:len(savefile) - 4], loadFile, savefile])
-        if len(buttonsList) < 4:
-            button('Back', (menuNameTextRect.centerx, menuNameTextRect.centery + 200), (150, 37.5), (100, 100, 100),
-                   menuEquals, Menu.MAIN)
-        else:
-            buttonsList.append(['Back', menuEquals, Menu.MAIN])
-    elif menu == Menu.NEW:
-        drawTextBox(f'Enter a name for your new game', (menuNameTextRect.centerx, menuNameTextRect.centery + 50),
-                    (100, 100, 100), (0, 0, 0), 2, typedText)
-        buttonsList = [None, [f'Difficulty: {difficulty}', setDifficulty], ['Start', createFile],
-                       ['Back', menuEquals, Menu.PLAY]]
-    for i in range(len(buttonsList)):
-        if buttonsList[i] == None:
-            pass
-        elif len(buttonsList[i]) == 1:
-            button(buttonsList[i][0],
-                   (menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))),
-                   (150, 37.5), (100, 100, 100))
-        elif len(buttonsList[i]) == 2:
-            button(buttonsList[i][0],
-                   (menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))),
-                   (150, 37.5), (100, 100, 100), buttonsList[i][1])
-        elif len(buttonsList[i]) == 3:
-            button(buttonsList[i][0],
-                   (menuNameTextRect.centerx, menuNameTextRect.centery + ButtonsListOffset + (50 + (i * 50))),
-                   (150, 37.5), (100, 100, 100), buttonsList[i][1], buttonsList[i][2])
-    TextBackground = pygame.Rect(0, 0, screenWidth, menuNameTextRect.centery + 15)
-    pygame.draw.rect(screen, (20, 20, 20), TextBackground)
-    screen.blit(menuNameText, menuNameTextRect)
-
-
 def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Vector2:
     if return_int:
-        return pygame.Vector2(int((((screenWidth / 2) - position.x) / tileWidth) // 1),
-                int((((screenHeight / 2) - position.y) / tileHeight) // 1))
-    return pygame.Vector2((((screenWidth / 2) - position.x) / tileWidth), (((screenHeight / 2) - position.y) / tileHeight))
+        return pygame.Vector2(int((((screen_width / 2) - position.x) / tileWidth) // 1),
+                              int((((screen_height / 2) - position.y) / tileHeight) // 1))
+    return pygame.Vector2((((screen_width / 2) - position.x) / tileWidth), (((screen_height / 2) - position.y) / tileHeight))
 
 
 def do_pathfinding(game_state: GameState) -> None:
@@ -544,29 +110,6 @@ health_boost_num = 0
 timeSinceSpawnHealthBoosts = 0
 
 attackMultiplierEnemies = 1
-
-
-def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y: int) -> list[list[tuple[int, int, int]]]:
-    preset_len_x = len(preset_maps[0])
-    preset_len_y = len(preset_maps[0][0])
-
-    chosen_presets = [[random.choice(preset_maps) for _ in range(num_presets_x)] for _ in range(num_presets_y)]
-
-    world_map: list[list[tuple[int, int, int]]] = []
-
-    colour_map = {
-        "-": WALL_COLOR,
-        " ": FLOOR_COLOR
-    }
-
-    for y in range(preset_len_y * num_presets_y):
-        world_map.append([])
-        for x in range(preset_len_x * num_presets_x):
-            world_map[y].append(
-                colour_map[chosen_presets[y // preset_len_y][x // preset_len_x][x % preset_len_x][y % preset_len_y]])
-            if not world_map[-1]: world_map.pop()
-
-    return world_map
 
 
 @dataclasses.dataclass
@@ -676,36 +219,29 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
         if powerup.time_remaining <= 0: game_state.player.powerups.remove(powerup)
 
 
-def lostGame() -> None:
-    lostGameRect = pygame.Rect(0, 0, screenWidth, screenHeight)
+def lostGame(game_state: GameState, menu: MainMenu) -> None:
+    lostGameRect = pygame.Rect(0, 0, screen_width, screen_height)
     draw_rect_alpha(screen, (50, 50, 50, 128), lostGameRect)
     lostGameText = font.render("GAME OVER!", True, (255, 0, 0))
-    lostGameTextRect = lostGameText.get_rect(center=(screenWidth / 2, screenHeight / 6))
+    lostGameTextRect = lostGameText.get_rect(center=(screen_width / 2, screen_height / 6))
     screen.blit(lostGameText, lostGameTextRect)
-    button('Respawn', (menuNameTextRect.centerx, menuNameTextRect.centery + 100), (150, 37.5), (100, 100, 100), respawn)
-    button('Menu', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100), toMenu)
+    Button.inline_button('Respawn', (lostGameTextRect.centerx, lostGameTextRect.centery + 100), (150, 37.5), (100, 100, 100), lambda: respawn(game_state), screen)
 
 
-def wonGame() -> None:
-    lostGameRect = pygame.Rect(0, 0, screenWidth, screenHeight)
+def wonGame(game_state: GameState, menu: MainMenu) -> None:
+    lostGameRect = pygame.Rect(0, 0, screen_width, screen_height)
     draw_rect_alpha(screen, (50, 50, 50, 128), lostGameRect)
     lostGameText = font.render("YOU WON!", True, (255, 0, 0))
-    lostGameTextRect = lostGameText.get_rect(center=(screenWidth / 2, screenHeight / 6))
+    lostGameTextRect = lostGameText.get_rect(center=(screen_width / 2, screen_height / 6))
     screen.blit(lostGameText, lostGameTextRect)
-    button('Play again', (menuNameTextRect.centerx, menuNameTextRect.centery + 100), (150, 37.5), (100, 100, 100),
-           respawn)
-    button('Menu', (menuNameTextRect.centerx, menuNameTextRect.centery + 150), (150, 37.5), (100, 100, 100), toMenu)
+    Button.inline_button('Play again', (lostGameTextRect.centerx, lostGameTextRect.centery + 100), (150, 37.5), (100, 100, 100),
+           lambda: respawn(game_state), screen)
 
 
-def respawn() -> None:
-    loadFile(currentFile)
-
-
-def toMenu() -> None:
-    global inGame, loadMenu
-    menuEquals(Menu.MAIN)
-    inGame = False
-    loadMenu = True
+def respawn(game_state: GameState) -> None:
+    game_state.player.health = 100
+    game_state.player.position = pygame.Vector2(90, -10)
+    game_state.enemies = spawnEnemies(40)
 
 
 def draw_rect_alpha(surface: pygame.Surface, color: tuple[int, int, int, int], rect: pygame.Rect) -> None:
@@ -904,8 +440,8 @@ def collect_item(game_state: GameState) -> None:
 
 
 def render_items(game_state: GameState) -> None:
-    width = screenWidth / 30
-    height = screenHeight / 30
+    width = screen_width / 30
+    height = screen_height / 30
     for x, item in enumerate(game_state.spawned_items):
         item.rect = pygame.Rect(((tileWidth) * (item.position[0])) + game_state.player.position[0],
                                    ((tileHeight) * (item.position[1])) + game_state.player.position[
@@ -931,9 +467,9 @@ def render_items(game_state: GameState) -> None:
 def jump(game_state: GameState) -> None:
     global jumpCount, jumping
     if jumpCount < 20:
-        move = pygame.math.Vector2(0, -((screenWidth / 800) * (0.1 * jumpCount)) - gravity - (screenWidth / 800))
+        move = pygame.math.Vector2(0, -((screen_width / 800) * (0.1 * jumpCount)) - gravity - (screen_width / 800))
     else:
-        move = pygame.math.Vector2(0, -(screenWidth / 600) - gravity - (screenWidth / 800))
+        move = pygame.math.Vector2(0, -(screen_width / 600) - gravity - (screen_width / 800))
     nextPlayer_y = game_state.player.rect.move(0, move.y)
     for x, tileRectRow in enumerate(tileRect):
         for y, tileRectRowColumn in enumerate(tileRectRow):
@@ -963,11 +499,6 @@ def jump(game_state: GameState) -> None:
 jumping = False
 
 
-def new_weapon(location: pygame.Vector2, weapon_type: type[Weapon] | None = None) -> Weapon:
-    if weapon_type is None: weapon_type = random.choice(weapon_types)
-    return weapon_type(location)
-
-
 def spawnEnemies(number: int) -> list[Enemy]:
     return_enemies: list[Enemy] = []
     for x in range(number):
@@ -979,7 +510,7 @@ def spawnEnemies(number: int) -> list[Enemy]:
 
 def render_enemies(given_state: GameState) -> None:
     for enemy in given_state.enemies:
-        enemy.render(given_state)
+        enemy.render(given_state, screen)
 
 
 itemSelected = 0
@@ -988,7 +519,7 @@ itemSelected = 0
 def render_inventory(game_state: GameState) -> pygame.Rect:
     global itemSelected, mouseNotUp, ButtonNotUp
 
-    inventory_background = pygame.Rect((screenWidth / 2) - (50 * len(game_state.player.inventory)), screenHeight - 100,
+    inventory_background = pygame.Rect((screen_width / 2) - (50 * len(game_state.player.inventory)), screen_height - 100,
                                        100 * len(game_state.player.inventory), 80)
     draw_rect_alpha(screen, (0, 0, 0, 128), inventory_background)
 
@@ -996,13 +527,13 @@ def render_inventory(game_state: GameState) -> pygame.Rect:
     rendered_inv_items: dict[int, pygame.Rect] = {}
     for n, item in enumerate(game_state.player.inventory):
         rendered_inv.append(
-            pygame.Rect((screenWidth / 2) - (50 * len(game_state.player.inventory) - (100 * n)), screenHeight - 100,
+            pygame.Rect((screen_width / 2) - (50 * len(game_state.player.inventory) - (100 * n)), screen_height - 100,
                         100, 80))
         if n == itemSelected: draw_rect_alpha(screen, (200, 200, 200, 128), rendered_inv[n])
         if item:
             rendered_inv_items[n] = (
-                pygame.Rect(screenWidth / 2 - (50 * len(game_state.player.inventory) - (100 * n)) + 35,
-                            screenHeight - 60 - 12.5, 30, 25))
+                pygame.Rect(screen_width / 2 - (50 * len(game_state.player.inventory) - (100 * n)) + 35,
+                            screen_height - 60 - 12.5, 30, 25))
             pygame.draw.rect(screen, item.colour, rendered_inv_items[n])
 
     inventory_slot_pressed: list[bool] = [
@@ -1037,58 +568,25 @@ def render_inventory(game_state: GameState) -> pygame.Rect:
 
     return inventory_background
 
-
-def saveFile(game_state: GameState, file_name: str) -> None:
-
-    save_file = SaveFile(difficulty=difficulty, game_state=game_state)
-    with open(f"gamesaves/{file_name}", "w") as file:
-        file.write(jsonpickle.encode(save_file))
-
-
 CollectItem = False
 
-
-def isOnGround(tile_map: list[list[tuple[int, int, int]]]) -> None:
-    global onGround, onGroundMap
-    onGround = []
-    for x in range(len(tile_map)):
-        for y in range(len(tile_map[0])):
-            if y == 64:
-                if tile_map[x][y] == GRID_COLOR or tile_map[x][y] == WALL_COLOR or tile_map[x][y] == FLOOR_NEXT_COL:
-                    pass
-                else:
-                    onGround.append([x, y])
-            else:
-                if tile_map[x][y + 1] == FLOOR_COLOR:
-                    pass
-                else:
-                    if tile_map[x][y] == GRID_COLOR or tile_map[x][y] == WALL_COLOR or tile_map[x][y] == FLOOR_NEXT_COL:
-                        pass
-                    else:
-                        onGround.append([x, y])
-    onGroundMap = []
-    for x in range(len(tile_map)):
-        onGroundMap.append([])
-        for y in range(len(tile_map)):
-            if [y, x] in onGround:
-                onGroundMap[x].append(1)
-            else:
-                onGroundMap[x].append(0)
-
-
 clock = pygame.time.Clock()
+
+main_menu = MainMenu()
+game_file: GameFile | None = None
 
 while True:
     pygame.display.update()
 
     for event in pygame.event.get():
+        if game_file is not None: main_menu.handle_input(event)
         if event.type == pygame.JOYBUTTONDOWN:
             if event.button == 0:
                 if jumping == False:
                     jumping = True
                     jumpCount = 0
             if event.button == 7:
-                if inGame: saveFile(game_state_global, currentFile)
+                if game_file is not None: save_game(game_file)
                 pygame.quit()
                 sys.exit()
             if event.button == 2:
@@ -1100,21 +598,15 @@ while True:
                     jumpCount = 0
             ButtonNotUp = False
         if event.type == QUIT:
-            if inGame:
-                if inGame: saveFile(game_state_global, currentFile)
+            if game_file is not None: save_game(game_file)
             pygame.quit()
             sys.exit()
         if event.type == pygame.MOUSEBUTTONUP:
             mouseNotUp = False
         if event.type == pygame.KEYDOWN:
-            if menu == Menu.NEW:
-                if event.key == pygame.K_BACKSPACE:
-                    typedText = typedText[:-1]
-                else:
-                    typedText += event.unicode
-            if inGame:
+            if game_file is not None:
                 if event.key == pygame.K_ESCAPE:
-                    saveFile(game_state_global, currentFile)
+                    save_game(game_file)
                     pygame.quit()
                     sys.exit()
                 if event.key == pygame.K_SPACE:
@@ -1123,7 +615,7 @@ while True:
                         jumpCount = 0
 
                 if event.key == pygame.K_h:
-                    player.position = pygame.Vector2(screenWidth, 0)
+                    game_file.game_state.player.position = pygame.Vector2(screen_width, 0)
                 if event.key == pygame.K_e:
                     CollectItem = True
             # if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
@@ -1133,20 +625,16 @@ while True:
                 if jumping == True:
                     jumping = False
                     jumpCount = 0
-
-        if event.type == pygame.MOUSEWHEEL:
-            if menu == Menu.PLAY and loadMenu == True and menuNameTextRect.centery + (
-                    50 + ((len(buttonsList) - 1) * 50)) > screenHeight:
-                ButtonsListOffset += event.y * 10
-                if ButtonsListOffset > 0:
-                    ButtonsListOffset = 0
-                if menuNameTextRect.centery + ButtonsListOffset + (
-                        50 + ((len(buttonsList) - 1) * 50)) + 30 < screenHeight:
-                    ButtonsListOffset -= event.y * 10
     screen.fill((20, 20, 20))
 
-    if loadMenu:
-        mainMenu(menu)
+    if game_file is None:
+        main_menu.render(screen)
+        game_file = main_menu.get_game()
+        if game_file:
+            pathTicks = 0
+            onGround = get_ground_tiles(game_file.game_state.tile_map)
+            onGroundMap = get_ground_map(game_file.game_state.tile_map, onGround)
+
 
     if (joysticks and joysticks[0].get_axis(5) < 0.5):
         TriggerNotUp = False
@@ -1154,11 +642,11 @@ while True:
         ButtonNotUp = False
     keys = pygame.key.get_pressed()
 
-    if inGame:
-        render_data = render_frame(game_state_global)
-        if game_state_global.player.health <= 0: lostGame()
-        elif not game_state_global.enemies: wonGame()
-        else: game_frame(game_state_global, render_data)
+    if game_file is not None:
+        render_data = render_frame(game_file.game_state)
+        if game_file.game_state.player.health <= 0: lostGame(game_file.game_state, main_menu)
+        elif not game_file.game_state.enemies: wonGame(game_file.game_state, main_menu)
+        else: game_frame(game_file.game_state, render_data)
 
         key = pygame.key.get_pressed()
 
@@ -1188,22 +676,22 @@ while True:
                 jumping = False
                 jumpCount = 0
 
-        if not game_state_global.player.health <= 0:
+        if not game_file.game_state.player.health <= 0:
             if jumping:
-                jump(game_state_global)
+                jump(game_file.game_state)
 
             move = pygame.math.Vector2(right - left, 0)
             if not jumping:
                 move.y -= gravity
             if move.length_squared() > 0:
-                speed = 400 if not any(isinstance(x, SpeedBoost) for x in game_state_global.player.powerups) else 300
-                move.scale_to_length(screenWidth / speed)
+                speed = 400 if not any(isinstance(x, SpeedBoost) for x in game_file.game_state.player.powerups) else 300
+                move.scale_to_length(screen_width / speed)
 
-                nextPlayer_x = game_state_global.player.rect.move(move.x, 0)
+                nextPlayer_x = game_file.game_state.player.rect.move(move.x, 0)
                 for x, tileRectRow in enumerate(tileRect):
                     for y, tileRectRowColumn in enumerate(tileRectRow):
                         if nextPlayer_x.colliderect(tileRect[x][y]) and (
-                                game_state_global.tile_map[x][y] == GRID_COLOR or game_state_global.tile_map[x][y] == WALL_COLOR or game_state_global.tile_map[x][
+                                game_file.game_state.tile_map[x][y] == GRID_COLOR or game_file.game_state.tile_map[x][y] == WALL_COLOR or game_file.game_state.tile_map[x][
                             y] == FLOOR_NEXT_COL):
                             if move.x > 0:  # moving right
                                 move.x = 0
@@ -1211,11 +699,11 @@ while True:
                                 move.x = 0
                             break
 
-                nextPlayer_y = game_state_global.player.rect.move(0, move.y)
+                nextPlayer_y = game_file.game_state.player.rect.move(0, move.y)
                 for x, tileRectRow in enumerate(tileRect):
                     for y, tileRectRowColumn in enumerate(tileRectRow):
                         if nextPlayer_y.colliderect(tileRect[x][y]) and (
-                                game_state_global.tile_map[x][y] == GRID_COLOR or game_state_global.tile_map[x][y] == WALL_COLOR or game_state_global.tile_map[x][
+                                game_file.game_state.tile_map[x][y] == GRID_COLOR or game_file.game_state.tile_map[x][y] == WALL_COLOR or game_file.game_state.tile_map[x][
                             y] == FLOOR_NEXT_COL):
                             if move.y > 0:  # moving down
                                 move.y = 0
@@ -1223,25 +711,25 @@ while True:
                                 move.y = 0
                             break
 
-                if game_state_global.player.position[0] <= -3268.8:
+                if game_file.game_state.player.position[0] <= -3268.8:
                     if move.x > 0:
                         move.x = 0
-                    game_state_global.player.position[0] = -3268.8
-                if game_state_global.player.position[0] >= 561:
+                    game_file.game_state.player.position[0] = -3268.8
+                if game_file.game_state.player.position[0] >= 561:
                     if move.x < 0:
                         move.x = 0
-                    game_state_global.player.position[0] = 561
-                if game_state_global.player.position[1] <= -1776:
+                    game_file.game_state.player.position[0] = 561
+                if game_file.game_state.player.position[1] <= -1776:
                     if move.y > 0:
                         move.y = 0
-                    game_state_global.player.position[1] = -1776
-                if game_state_global.player.position[1] >= 315.2:
+                    game_file.game_state.player.position[1] = -1776
+                if game_file.game_state.player.position[1] >= 315.2:
                     if move.y < 0:
                         move.y = 0
-                    game_state_global.player.position[1] = 315.2
+                    game_file.game_state.player.position[1] = 315.2
 
-                game_state_global.player.position[0] -= move.x
-                game_state_global.player.position[1] -= move.y
+                game_file.game_state.player.position[0] -= move.x
+                game_file.game_state.player.position[1] -= move.y
 
     if CollectItem:
         CollectItem = False
