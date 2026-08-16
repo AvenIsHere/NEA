@@ -14,9 +14,9 @@ root.withdraw()
 
 class Menu:
     title: str
-    button_list: list[Button | TextBox]
+    button_list: list[Button]
 
-    def __init__(self, title: str, button_list: list[Button | TextBox]):
+    def __init__(self, title: str, button_list: list[Button]):
         self.title = title
         self.button_list = button_list
 
@@ -32,55 +32,7 @@ class Menu:
             for button in self.button_list:
                 if button.rect.collidepoint(pygame.mouse.get_pos()[0], pygame.mouse.get_pos()[1]):
                     button.on_click()
-                else:
-                    if isinstance(button, TextBox): button.active = False
-        if event.type == pygame.KEYDOWN:
-            for button in self.button_list:
-                if isinstance(button, TextBox) and button.active:
-                    if event.type == pygame.K_BACKSPACE:
-                        button.set_text(button.text[:-1])
-                        return
-                    button.set_text(button.text + event.unicode)
-                    
 
-class TextBox:
-    text: str
-    placeholder_text: str
-    colour: tuple[int, int, int]
-    border_colour: tuple[int, int, int]
-    border_size: int
-    position: tuple[int, int]
-    rect: pygame.Rect
-
-    active: bool = False
-
-    def __init__(self, text: str, placeholder_text: str, colour: tuple[int, int, int], border_colour: tuple[int, int, int], border_size: int, position: tuple[int, int]):
-        self.text = text
-        self.placeholder_text = placeholder_text
-        self.colour = colour
-        self.border_colour = border_colour
-        self.border_size = border_size
-        self.position = position
-        self.rect = pygame.font.Font(None, 32).render(self.placeholder_text, True, (0, 0, 0)).get_rect(center=self.position)
-
-    def render(self, screen: pygame.Surface) -> None:
-        if self.text == "":
-            rendered_text = pygame.font.Font(None, 32).render(self.placeholder_text, True, (0, 0, 0))
-        else:
-            rendered_text = pygame.font.Font(None, 32).render(self.text, True, (0, 0, 0))
-        text_rect = rendered_text.get_rect(center=self.position)
-        pygame.draw.rect(screen, self.colour, text_rect)
-        pygame.draw.rect(screen, self.border_colour, (
-            text_rect.x - self.border_size, text_rect.y - self.border_size, text_rect.width + self.border_size * 2,
-            text_rect.height + self.border_size * 2), self.border_size)
-        screen.blit(rendered_text, text_rect)
-
-    def set_text(self, text: str) -> None:
-        self.text = text
-        self.rect = pygame.font.Font(None, 32).render(self.text, True, (0, 0, 0)).get_rect(center=self.position)
-
-    def on_click(self) -> None:
-        self.active = True
 
 class Button:
     text: str
@@ -137,13 +89,12 @@ class MainMenu:
             ]),
             "Play": Menu("Play", [
                 Button("New Game", (100, 100), (100, 50), (20, 20, 20), lambda: self.set_menu("New")),
-                Button("Open File", (100, 200), (100, 50), (20, 20, 20), lambda: load_save(Path(filedialog.askopenfilename()))),
+                Button("Open File", (100, 200), (100, 50), (20, 20, 20), lambda: setattr(self, 'file_opened', load_save(Path(self._ask_open_filename())))),
                 Button("Back", (100, 300), (100, 50), (20, 20, 20), lambda: self.set_menu("Main"))
             ]),
             "New": Menu("New Game", [
-                TextBox("", "Enter the file name here", (20, 20, 20), (40, 40, 40), 5, (100, 100)),
-                Button(f"Difficulty: {self.difficulty_selected}", (100, 200), (100, 50), (20, 20, 20), lambda: self.cycle_difficulty()),
-                Button("Create Game", (100, 200), (100, 50), (20, 20, 20), lambda: setattr(self, 'file_opened', new_save(Path(filedialog.asksaveasfilename()), self.difficulty_selected))),
+                Button(f"Difficulty: {self.difficulty_selected}", (100, 100), (100, 50), (20, 20, 20), lambda: self.cycle_difficulty()),
+                Button("Create Game", (100, 200), (100, 50), (20, 20, 20), lambda: setattr(self, 'file_opened', new_save(Path(self._ask_save_filename()), self.difficulty_selected))),
                 Button("Back", (100, 300), (100, 50), (20, 20, 20), lambda: self.set_menu("Play"))
             ]),
             "Settings": Menu("Settings", [
@@ -161,10 +112,29 @@ class MainMenu:
     def render(self, screen: pygame.Surface) -> None:
         self.menu.render(screen)
 
+    @staticmethod
+    def _ask_open_filename() -> str:
+        root.attributes('-topmost', True)
+        root.focus_force()
+        filename = filedialog.askopenfilename(parent=root)
+        root.attributes('-topmost', False)
+        return filename
+
+    @staticmethod
+    def _ask_save_filename() -> str:
+        root.attributes('-topmost', True)
+        root.focus_force()
+        filename = filedialog.asksaveasfilename(parent=root)
+        root.attributes('-topmost', False)
+        return filename
+
     def cycle_difficulty(self) -> None:
+        if self.difficulty_selected == Difficulty.Very_Difficult:
+            self.difficulty_selected = Difficulty.Easy
+            return
         difficulties = list(Difficulty)
         current_index = difficulties.index(self.difficulty_selected)
-        next_index = (current_index + 1) % len(difficulties)
+        next_index = (current_index + 1)
         self.difficulty_selected = difficulties[next_index]
 
     def handle_input(self, event: pygame.event.Event) -> None:

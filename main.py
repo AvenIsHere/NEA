@@ -19,7 +19,7 @@ from consts import font2, font, font3, screen_width, tileWidth, screen_height, t
     FLOOR_NEXT_COL, gravity
 from file import GameFile, save_game
 from game import get_ground_map, get_ground_tiles, GameState, Wizard, Knight, Weapon, HealthBoost, Powerup, Player, \
-    Enemy, Gun, DamageBoost, Sword, Wand, Item, powerup_types, weapon_types, enemy_types, SpeedBoost
+    Enemy, Gun, DamageBoost, Sword, Wand, SpeedBoost, spawn_item, spawn_enemies
 from menu import MainMenu, Button
 
 pygame.init()
@@ -210,7 +210,7 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
         if isinstance(item, HealthBoost)
     )
     if health_boost_num < 10 and timeSinceSpawnHealthBoosts >= 600:
-        game_state.spawned_items.append(spawn_item(Powerup, True))
+        game_state.spawned_items.append(spawn_item(Powerup, onGround))
         timeSinceSpawnHealthBoosts = 0
     timeSinceSpawnHealthBoosts += 1
 
@@ -241,7 +241,7 @@ def wonGame(game_state: GameState, menu: MainMenu) -> None:
 def respawn(game_state: GameState) -> None:
     game_state.player.health = 100
     game_state.player.position = pygame.Vector2(90, -10)
-    game_state.enemies = spawnEnemies(40)
+    game_state.enemies = spawn_enemies(40, onGround)
 
 
 def draw_rect_alpha(surface: pygame.Surface, color: tuple[int, int, int, int], rect: pygame.Rect) -> None:
@@ -400,16 +400,6 @@ def manageBullets(given_state: GameState) -> None:
             break
 
 
-def spawn_item(item_type: type[Item], health_boost: bool = False) -> Item:
-    location = onGround[random.randint(0, len(onGround) - 1)]
-    if item_type == Powerup:
-        powerup_type = HealthBoost if health_boost else random.choice(powerup_types)
-        return powerup_type(location)
-    else:
-        weapon_type: type[Weapon] = random.choice(weapon_types)
-        return weapon_type(location)
-
-
 def collect_item(game_state: GameState) -> None:
     for x, item in reversed(list(enumerate(game_state.spawned_items))):
         if not (abs(game_state.player.rect.x - item.rect[0]) < 100 and abs(
@@ -498,16 +488,6 @@ def jump(game_state: GameState) -> None:
 
 jumping = False
 
-
-def spawnEnemies(number: int) -> list[Enemy]:
-    return_enemies: list[Enemy] = []
-    for x in range(number):
-        location = onGround[random.randint(0, len(onGround) - 1)]
-        enemy_type = random.choice(enemy_types)
-        return_enemies.append(enemy_type(100, location))
-    return return_enemies
-
-
 def render_enemies(given_state: GameState) -> None:
     for enemy in given_state.enemies:
         enemy.render(given_state, screen)
@@ -579,7 +559,7 @@ while True:
     pygame.display.update()
 
     for event in pygame.event.get():
-        if game_file is not None: main_menu.handle_input(event)
+        if game_file is None: main_menu.handle_input(event)
         if event.type == pygame.JOYBUTTONDOWN:
             if event.button == 0:
                 if jumping == False:
