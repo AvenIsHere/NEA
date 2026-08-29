@@ -39,8 +39,8 @@ class GameState:
 
         items: list[Item] = []
         for x in range(20):
-            items.append(spawn_item(Powerup, ground_tiles))
-            items.append(spawn_item(Weapon, ground_tiles))
+            items.append(Powerup.spawn(ground_tiles))
+            items.append(Weapon.spawn(ground_tiles))
 
         ui_bars = [
             UIBar("Player Health", (200, 25, 25), lambda: player.health / 100),
@@ -147,6 +147,12 @@ class Weapon(Item, ABC):
     def __init__(self, location: pygame.Vector2, strength: float = 1.0):
         super().__init__(location)
         self.strength = strength
+
+    @staticmethod
+    def spawn(possible_locations: list[pygame.Vector2]) -> Weapon:
+        location = possible_locations[random.randint(0, len(possible_locations) - 1)]
+        weapon_type = random.choice(weapon_types)
+        return weapon_type(location)
 
 
 class Sword(Weapon):
@@ -267,6 +273,12 @@ class Powerup(Item):
     def __init__(self, location: pygame.Vector2):
         super().__init__(location)
 
+    @staticmethod
+    def spawn(possible_locations: list[pygame.Vector2]) -> Powerup:
+        location = possible_locations[random.randint(0, len(possible_locations) - 1)]
+        powerup_type = random.choice(powerup_types)
+        return powerup_type(location)
+
 class SpeedBoost(Powerup):
     name = "Increased Speed"
     colour = (0, 0, 200)
@@ -279,18 +291,12 @@ class HealthBoost(Powerup):
     name = "+20 Health"
     colour = (200, 25, 25)
 
+    @staticmethod
+    def spawn(possible_locations: list[pygame.Vector2]) -> HealthBoost:
+        location = possible_locations[random.randint(0, len(possible_locations) - 1)]
+        return HealthBoost(location)
+
 powerup_types: list[type[Powerup]] = [SpeedBoost, DamageBoost, HealthBoost]
-
-
-def spawn_item(item_type: type[Item], possible_locations: list[pygame.Vector2], health_boost: bool = False) -> Item:
-    location = possible_locations[random.randint(0, len(possible_locations) - 1)]
-    if item_type == Powerup:
-        powerup_type = HealthBoost if health_boost else random.choice(powerup_types)
-        return powerup_type(location)
-    else:
-        weapon_type: type[Weapon] = random.choice(weapon_types)
-        return weapon_type(location)
-
 
 class Player(Entity):
     inventory: list[Item | None]

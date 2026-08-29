@@ -19,7 +19,7 @@ from consts import font2, font, font3, screen_width, tileWidth, screen_height, t
     FLOOR_NEXT_COL, gravity
 from file import GameFile, save_game
 from game import get_ground_map, get_ground_tiles, GameState, Wizard, Knight, Weapon, HealthBoost, Powerup, Player, \
-    Enemy, Gun, DamageBoost, Sword, Wand, SpeedBoost, spawn_item, spawn_enemies
+    Enemy, Gun, DamageBoost, Sword, Wand, SpeedBoost, spawn_enemies
 from game_ui import UIBar
 from menu import MainMenu, Button
 
@@ -194,7 +194,7 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
         if isinstance(item, HealthBoost)
     )
     if health_boost_num < 10 and timeSinceSpawnHealthBoosts >= 600:
-        game_state.spawned_items.append(spawn_item(Powerup, onGround))
+        game_state.spawned_items.append(Powerup.spawn(onGround))
         timeSinceSpawnHealthBoosts = 0
     timeSinceSpawnHealthBoosts += 1
 
