@@ -8,6 +8,7 @@ import pygame
 
 from consts import tileWidth, tileHeight, screen_height, screen_width, font2, WALL_COLOR, FLOOR_COLOR, GRID_COLOR, \
     FLOOR_NEXT_COL, PresetMaps
+from game_ui import UIBar
 
 
 class Difficulty(Enum):
@@ -25,6 +26,7 @@ class GameState:
     wand_magic_fired: list[WandMagicThing]
     spawned_items: list[Item]
     tile_map: list[list[tuple[int, int, int]]]
+    ui_bars: list[UIBar]
 
     @classmethod
     def new_game(cls, difficulty: Difficulty) -> GameState:
@@ -40,7 +42,12 @@ class GameState:
             items.append(spawn_item(Powerup, ground_tiles))
             items.append(spawn_item(Weapon, ground_tiles))
 
-        return GameState(difficulty, player, enemies, [], [], items, world_map)
+        ui_bars = [
+            UIBar("Player Health", (200, 25, 25), lambda: player.health / 100),
+            UIBar("Enemies remaining", (128, 128, 128), lambda: len(enemies) / 40)
+        ]
+
+        return GameState(difficulty, player, enemies, [], [], items, world_map, ui_bars)
 
 def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y: int) -> list[list[tuple[int, int, int]]]:
     preset_len_x = len(preset_maps[0])
@@ -102,8 +109,8 @@ class Item(Entity, ABC):
     colour: ClassVar[tuple[int, int, int]]
 
     def __init__(self, location: pygame.Vector2):
-        super().__init__(1.0, location, pygame.Rect(((tileWidth) * (location[0])),
-                                   ((tileHeight) * (location[1])) + tileHeight - (screen_height/30) + 1, (screen_width/30), (screen_height/30)))
+        super().__init__(1.0, location, pygame.Rect((tileWidth * (location[0])),
+                                                    (tileHeight * (location[1])) + tileHeight - (screen_height / 30) + 1, (screen_width / 30), (screen_height / 30)))
 
 
 class Bullet(Entity):
@@ -125,7 +132,7 @@ class WandMagicThing(Entity):
     damage: float
 
     def __init__(self, position: pygame.Vector2, age: int, target: Entity, damage: float):
-        super().__init__(0.1, position, pygame.Rect(((tileWidth) * (position[0])), ((tileHeight) * (position[1])),
+        super().__init__(0.1, position, pygame.Rect((tileWidth * (position[0])), (tileHeight * (position[1])),
                                                     target.rect.width / 4, target.rect.width / 4))
         self.age = age
         self.target = target

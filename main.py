@@ -20,6 +20,7 @@ from consts import font2, font, font3, screen_width, tileWidth, screen_height, t
 from file import GameFile, save_game
 from game import get_ground_map, get_ground_tiles, GameState, Wizard, Knight, Weapon, HealthBoost, Powerup, Player, \
     Enemy, Gun, DamageBoost, Sword, Wand, SpeedBoost, spawn_item, spawn_enemies
+from game_ui import UIBar
 from menu import MainMenu, Button
 
 pygame.init()
@@ -112,29 +113,12 @@ timeSinceSpawnHealthBoosts = 0
 attackMultiplierEnemies = 1
 
 
-@dataclasses.dataclass
-class UIBar:
-    percent: float
-    text: str
-    colour: tuple[int, int, int]
-
-
 def render_UI(game_state: GameState) -> None:
-    ui_items: list[UIBar] = []
-
-    if game_state.player.health > 0: ui_items.append(
-        UIBar(game_state.player.health / 100, str(game_state.player.health), (200, 25, 25)))
-    if len(game_state.enemies) > 0: ui_items.append(
-        UIBar(len(game_state.enemies) / 40, str(len(game_state.enemies)) + " enemies remaining", (128, 128, 128)))
-    for powerup in game_state.player.powerups:
-        ui_items.append(UIBar(powerup.time_remaining / 1000, powerup.name, powerup.colour))
-
-    for index, ui_element in enumerate(ui_items):
-        element_bar = pygame.Rect(20, 20 + (index * 50), 200 * ui_element.percent, 20)
-        element_text = font2.render(ui_element.text, True, (0, 0, 0))
-        element_text_rect = element_text.get_rect(left=20, top=element_bar.bottom + 5)
-        pygame.draw.rect(screen, ui_element.colour, element_bar)
-        screen.blit(element_text, element_text_rect)
+    for i, ui_bar in enumerate(reversed(game_state.ui_bars)):
+        if ui_bar.get_percent() <= 0:
+            game_state.ui_bars.remove(ui_bar)
+            continue
+        ui_bar.render(screen, pygame.Vector2(20, 20 + (i * 50)))
 
 
 pathfindingThread = Thread(target=do_pathfinding)
@@ -242,6 +226,10 @@ def respawn(game_state: GameState) -> None:
     game_state.player.health = 100
     game_state.player.position = pygame.Vector2(90, -10)
     game_state.enemies = spawn_enemies(40, onGround)
+    game_state.ui_bars = [
+        UIBar("Health remaining", (200, 25, 25), lambda: game_state.player.health / 100),
+        UIBar("Enemies remaining", (128, 128, 128), lambda: len(game_state.enemies) / 40)
+    ]
 
 
 def draw_rect_alpha(surface: pygame.Surface, color: tuple[int, int, int, int], rect: pygame.Rect) -> None:
@@ -425,6 +413,7 @@ def collect_item(game_state: GameState) -> None:
             if any(isinstance(x, type(item)) for x in game_state.player.powerups): continue
             game_state.player.powerups.append(item)
             game_state.spawned_items.remove(item)
+            game_state.ui_bars.append(UIBar(item.name, item.colour, lambda: item.time_remaining / 1000))
             break
 
 
