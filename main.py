@@ -32,7 +32,7 @@ pygame.display.set_caption('NEA')
 
 # TODO: Fix globals needed for pathfinding
 tileRect: list[list[pygame.Rect]]
-enemiesToMove: list[list[int | tuple[int, int]]]
+enemiesToMove: list[tuple[int, tuple[int, int]]]
 pathGrid: list[str]
 grid: pathfinding.core.grid.Grid
 
@@ -57,36 +57,40 @@ def do_pathfinding(game_state: GameState) -> None:
                     for l in range(len(pathGrid)):
                         if 'se' in pathGrid[l] and not '#se' in pathGrid[l]:
                             n = int(get_grid_pos(game_state.player.position)[0] // 1) - 2
-                            enemiesToMove.append([x, (n, l)])
+                            enemiesToMove.append((x, (n, l)))
                         elif 'es' in pathGrid[l] and not 'es#' in pathGrid[l]:
                             n = int(get_grid_pos(game_state.player.position)[0] // 1) + 2
-                            enemiesToMove.append([x, (n, l)])
+                            enemiesToMove.append((x, (n, l)))
                         elif 'sxxe' in pathGrid[l] or 'exxs' in pathGrid[l]:
                             pass
                         elif 'x' in pathGrid[l]:
+                            sLocation, eLocation = None, None
                             for z in range(len(pathGrid[l])):
                                 if pathGrid[l][z] == 's':
                                     sLocation = z
                             for z in range(len(pathGrid[l])):
                                 if pathGrid[l][z] == 'e':
                                     eLocation = z
+                            if sLocation is None or eLocation is None: continue
                             if sLocation < eLocation:
                                 n = int(get_grid_pos(game_state.player.position)[0] // 1) - 1
-                            elif eLocation < sLocation:
+                            else:
                                 n = int(get_grid_pos(game_state.player.position)[0] // 1) + 1
-                            enemiesToMove.append([x, (n, l)])
+                            enemiesToMove.append((x, (n, l)))
                 elif isinstance(game_state.enemies[x], Knight):
                     for l in range(len(pathGrid)):
                         if 'x' in pathGrid[l] or 'se' in pathGrid[l] or 'es' in pathGrid[l]:
+                            n = None
                             for i in reversed(range(len(pathGrid[l]))):
                                 if pathGrid[l][i] == 'x' or (pathGrid[l][i] == 'e' and (
                                         pathGrid[l][i - 1] == 's' or pathGrid[l][i + 1] == 's')):
                                     n = int(get_grid_pos(game_state.player.position)[0])
-                            enemiesToMove.append([x, (n, l)])
+                            if n is None: continue
+                            enemiesToMove.append((x, (n, l)))
         pathTicks = 50
-    if enemiesToMove != []:
+    if enemiesToMove:
         for x in range(len(enemiesToMove)):
-            if game_state.enemies[enemiesToMove[x][0]].position != enemiesToMove[x][1]:
+            if game_state.enemies[enemiesToMove[x][0]].position != pygame.Vector2(enemiesToMove[x][1]):
                 if game_state.enemies[enemiesToMove[x][0]].position[0] // 1 > enemiesToMove[x][1][0] // 1:
                     game_state.enemies[enemiesToMove[x][0]].position[0] -= 0.05
                 if game_state.enemies[enemiesToMove[x][0]].position[0] // 1 < enemiesToMove[x][1][0] // 1:
