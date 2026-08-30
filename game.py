@@ -1,4 +1,5 @@
 import dataclasses
+import math
 import random
 from abc import ABC
 from enum import Enum
@@ -48,6 +49,12 @@ class GameState:
         ]
 
         return GameState(difficulty, player, enemies, [], [], items, world_map, ui_bars)
+
+    def handle_click(self, mouse_pos: pygame.Vector2) -> None:
+        if ((not self.player.inventory.background_rect.collidepoint(mouse_pos))
+                and self.player.inventory.slots[self.player.inventory.active_slot].item is not None):
+            self.player.attack(self)
+        self.player.inventory.handle_click(mouse_pos, self)
 
 def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y: int) -> list[list[tuple[int, int, int]]]:
     preset_len_x = len(preset_maps[0])
@@ -243,6 +250,20 @@ class Enemy(Entity, ABC):
         enemy_type = random.choice(enemy_types)
         return enemy_type(100, location)
 
+    def attack(self, game_state: GameState) -> None:
+        if game_state.difficulty != Difficulty.Very_Difficult: attackMultiplierEnemies = 1
+        else: attackMultiplierEnemies = 2
+        weapon = self.weapon
+        if isinstance(weapon, Gun):
+            weapon.shoot(game_state, self, self.position.copy(),
+                         math.atan2((game_state.player.rect.centery - self.rect.centery),
+                                    (game_state.player.rect.centerx - self.rect.centerx)),
+                         attackMultiplierEnemies)
+        elif isinstance(weapon, Sword):
+            weapon.attack(game_state.player, attackMultiplierEnemies)
+        elif isinstance(weapon, Wand):
+            weapon.fire(game_state, game_state.player, self.position, attackMultiplierEnemies)
+
 class Knight(Enemy):
     weapon_type = Sword
     name = "Knight"
@@ -304,6 +325,30 @@ class Player(Entity):
         super().__init__(health, position, pygame.Rect(screen_width * 39/80, screen_height * 39/80, screen_width / 40, screen_height / 40))
         self.inventory = Inventory(inventory)
         self.powerups = []
+
+    def attack(self, game_state: GameState) -> None:
+
+        weapon = self.inventory.slots[self.inventory.active_slot].item
+        if not isinstance(weapon, Weapon): return None
+
+        if isinstance(weapon, Gun):
+            angle = math.atan2((pygame.mouse.get_pos()[1] - self.rect.centery), (pygame.mouse.get_pos()[0] - self.rect.centerx))
+            attack_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in self.powerups) else 2
+            weapon.shoot(game_state, self, get_grid_pos(self.position, False), angle, attack_multiplier)
+        elif isinstance(weapon, Sword):
+            for x in range(len(game_state.enemies)):
+                if abs(game_state.enemies[x].rect.centerx - self.rect.centerx) < 50 and abs(game_state.enemies[x].rect.centery - self.rect.centery) < 50:
+                    attack_multiplier = 1 if not any(isinstance(n, DamageBoost) for n in game_state.player.powerups) else 2
+                    weapon.attack(game_state.enemies[x], attack_multiplier)
+        elif isinstance(weapon, Wand):
+            shortestDistance: tuple[Enemy | None, float] = None, 1000000.0
+            for enemy in game_state.enemies:
+                distanceToX = pygame.math.Vector2(enemy.rect.centerx - self.rect.centerx, enemy.rect.centery - self.rect.centery)
+                if distanceToX.length() < shortestDistance[1]:
+                    shortestDistance = enemy, distanceToX.length()
+            if shortestDistance[1] < 300 and shortestDistance[0] is not None:
+                attack_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in game_state.player.powerups) else 2
+                weapon.fire(game_state, shortestDistance[0], get_grid_pos(self.position, False), attack_multiplier)
 
 def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Vector2:
     if return_int:

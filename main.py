@@ -19,7 +19,7 @@ from consts import font2, font, font3, screen_width, tileWidth, screen_height, t
     FLOOR_NEXT_COL, gravity
 from file import GameFile, save_game
 from game import get_ground_map, get_ground_tiles, GameState, Wizard, Knight, Weapon, HealthBoost, Powerup, Player, \
-    Enemy, Gun, DamageBoost, Sword, Wand, SpeedBoost, get_grid_pos
+    Enemy, DamageBoost, SpeedBoost, get_grid_pos
 from game_ui import UIBar, draw_rect_alpha
 from menu import MainMenu, Button
 
@@ -137,12 +137,6 @@ def render_frame(game_state: GameState) -> RenderedElements:
     game_state.player.inventory.render(screen)
     return RenderedElements(tiles_rendered)
 
-def handle_click(game_state: GameState, mouse_pos: pygame.Vector2) -> None:
-    if ((not game_state.player.inventory.background_rect.collidepoint(mouse_pos))
-            and game_state.player.inventory.slots[game_state.player.inventory.active_slot].item is not None):
-        attack(game_state, game_state.player)
-    game_state.player.inventory.handle_click(mouse_pos, game_state)
-
 
 def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
     global pathfindingThread, attackMultiplierEnemies, timeSinceSpawnHealthBoosts, tileRect
@@ -158,9 +152,9 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
         distance = pygame.math.Vector2(abs(enemy.rect.x - game_state.player.rect.x),
                                        abs(enemy.rect.y - game_state.player.rect.y))
         if isinstance(enemy, Knight) and distance.length() < 40:
-            attack(game_state, enemy)
+            enemy.attack(game_state)
         if not isinstance(enemy, Knight) and distance.length() < 300:
-            attack(game_state, enemy)
+            enemy.attack(game_state)
         enemy.weapon.time_since_attack += 1
 
     manageBullets(game_state)
@@ -212,52 +206,6 @@ def respawn(game_state: GameState) -> None:
 
 
 attackStrength = random.randint(6, 9)
-
-
-def attack(game_state: GameState, origin: Player | Enemy, controller: bool = False) -> None:
-    if isinstance(origin, Player):
-        weapon = origin.inventory.slots[origin.inventory.active_slot].item
-        if not isinstance(weapon, Weapon): raise RuntimeError("Player attempted to attack with powerup")
-    else:
-        weapon = origin.weapon
-
-    if isinstance(weapon, Gun):
-        if isinstance(origin, Player):
-
-            if not controller:
-                angle = math.atan2((pygame.mouse.get_pos()[1] - origin.rect.centery),
-                                   (pygame.mouse.get_pos()[0] - origin.rect.centerx))
-            else:
-                angle = math.atan2(joysticks[0].get_axis(3), joysticks[0].get_axis(2))
-            attack_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in game_state.player.powerups) else 2
-            weapon.shoot(game_state, origin, get_grid_pos(origin.position, False), angle, attack_multiplier)
-        else:
-            weapon.shoot(game_state, origin, origin.position.copy(),
-                         math.atan2((game_state.player.rect.centery - origin.rect.centery),
-                                    (game_state.player.rect.centerx - origin.rect.centerx)), attackMultiplierEnemies)
-    elif isinstance(weapon, Sword):
-        if isinstance(origin, Player):
-            for x in range(len(game_state.enemies)):
-                if abs(game_state.enemies[x].rect.centerx - origin.rect.centerx) < 50 and abs(
-                        game_state.enemies[x].rect.centery - origin.rect.centery) < 50:
-                    attack_multiplier = 1 if not any(isinstance(n, DamageBoost) for n in game_state.player.powerups) else 2
-                    weapon.attack(game_state.enemies[x], attack_multiplier)
-        else:
-            weapon.attack(game_state.player, attackMultiplierEnemies)
-    elif isinstance(weapon, Wand):
-        if isinstance(origin, Player):
-            shortestDistance: tuple[Enemy | None, float] = None, 1000000.0
-            for enemy in game_state.enemies:
-                distanceToX = pygame.math.Vector2(enemy.rect.centerx - origin.rect.centerx,
-                                                  enemy.rect.centery - origin.rect.centery)
-                if distanceToX.length() < shortestDistance[1]:
-                    shortestDistance = enemy, distanceToX.length()
-            if shortestDistance[1] < 300 and shortestDistance[0] is not None:
-                attack_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in game_state.player.powerups) else 2
-                weapon.fire(game_state, shortestDistance[0],
-                            get_grid_pos(origin.position, False), attack_multiplier)
-        else:
-            weapon.fire(game_state, game_state.player, origin.position, attackMultiplierEnemies)
 
 
 def manageBullets(given_state: GameState) -> None:
@@ -466,7 +414,7 @@ while True:
         if game_file is None: main_menu.handle_input(event)
         if event.type == pygame.MOUSEBUTTONDOWN:
             if game_file is not None:
-                handle_click(game_file.game_state, pygame.Vector2(pygame.mouse.get_pos()))
+                game_file.game_state.handle_click(pygame.Vector2(pygame.mouse.get_pos()))
         if event.type == pygame.JOYBUTTONDOWN:
             if event.button == 0:
                 if jumping == False:
