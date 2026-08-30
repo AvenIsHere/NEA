@@ -19,29 +19,27 @@ from consts import font2, font, font3, screen_width, tileWidth, screen_height, t
     FLOOR_NEXT_COL, gravity
 from file import GameFile, save_game
 from game import get_ground_map, get_ground_tiles, GameState, Wizard, Knight, Weapon, HealthBoost, Powerup, Player, \
-    Enemy, Gun, DamageBoost, Sword, Wand, SpeedBoost, spawn_enemies
+    Enemy, Gun, DamageBoost, Sword, Wand, SpeedBoost
 from game_ui import UIBar
 from menu import MainMenu, Button
 
+# Pygame initialisation
 pygame.init()
 pygame.joystick.init()
 joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
-
-# defining different variables
 screen = pygame.display.set_mode((1152, 648))
 pygame.display.set_caption('NEA')
 
-ButtonsListOffset = 0
+# TODO: Find another solution for debounce
 mouseNotUp = False
 ButtonNotUp = False
 TriggerNotUp = False
 
-difficulty_num = {
-    "Easy": 1,
-    "Normal": 2,
-    "Difficult": 3,
-    "Very Difficult": 4
-}
+# TODO: Fix globals needed for pathfinding
+tileRect: list[list[pygame.Rect]]
+enemiesToMove: list[list[int | tuple[int, int]]]
+pathGrid: list[str]
+grid: pathfinding.core.grid.Grid
 
 def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Vector2:
     if return_int:
@@ -107,7 +105,6 @@ def do_pathfinding(game_state: GameState) -> None:
     pathTicks -= 1
 
 
-health_boost_num = 0
 timeSinceSpawnHealthBoosts = 0
 
 attackMultiplierEnemies = 1
@@ -154,7 +151,7 @@ def render_frame(game_state: GameState) -> RenderedElements:
 
 
 def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
-    global pathfindingThread, attackMultiplierEnemies, health_boost_num, timeSinceSpawnHealthBoosts, TriggerNotUp, tileRect, ButtonNotUp, mouseNotUp
+    global pathfindingThread, attackMultiplierEnemies, timeSinceSpawnHealthBoosts, TriggerNotUp, tileRect, mouseNotUp
 
     tileRect = render_data.tiles_rendered
     if CollectItem: collect_item(game_state)
@@ -203,7 +200,7 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
         if powerup.time_remaining <= 0: game_state.player.powerups.remove(powerup)
 
 
-def lostGame(game_state: GameState, menu: MainMenu) -> None:
+def lostGame(game_state: GameState) -> None:
     lostGameRect = pygame.Rect(0, 0, screen_width, screen_height)
     draw_rect_alpha(screen, (50, 50, 50, 128), lostGameRect)
     lostGameText = font.render("GAME OVER!", True, (255, 0, 0))
@@ -212,7 +209,7 @@ def lostGame(game_state: GameState, menu: MainMenu) -> None:
     Button.inline_button('Respawn', (lostGameTextRect.centerx, lostGameTextRect.centery + 100), (150, 37.5), (100, 100, 100), lambda: respawn(game_state), screen)
 
 
-def wonGame(game_state: GameState, menu: MainMenu) -> None:
+def wonGame(game_state: GameState) -> None:
     lostGameRect = pygame.Rect(0, 0, screen_width, screen_height)
     draw_rect_alpha(screen, (50, 50, 50, 128), lostGameRect)
     lostGameText = font.render("YOU WON!", True, (255, 0, 0))
@@ -225,7 +222,7 @@ def wonGame(game_state: GameState, menu: MainMenu) -> None:
 def respawn(game_state: GameState) -> None:
     game_state.player.health = 100
     game_state.player.position = pygame.Vector2(90, -10)
-    game_state.enemies = spawn_enemies(40, onGround)
+    game_state.enemies = [Enemy.spawn(onGround) for _ in range(40)]
     game_state.ui_bars = [
         UIBar("Health remaining", (200, 25, 25), lambda: game_state.player.health / 100),
         UIBar("Enemies remaining", (128, 128, 128), lambda: len(game_state.enemies) / 40)
@@ -613,8 +610,8 @@ while True:
 
     if game_file is not None:
         render_data = render_frame(game_file.game_state)
-        if game_file.game_state.player.health <= 0: lostGame(game_file.game_state, main_menu)
-        elif not game_file.game_state.enemies: wonGame(game_file.game_state, main_menu)
+        if game_file.game_state.player.health <= 0: lostGame(game_file.game_state)
+        elif not game_file.game_state.enemies: wonGame(game_file.game_state)
         else: game_frame(game_file.game_state, render_data)
 
         key = pygame.key.get_pressed()

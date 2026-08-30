@@ -35,7 +35,7 @@ class GameState:
 
         ground_tiles = get_ground_tiles(world_map)
 
-        enemies = spawn_enemies(40, ground_tiles)
+        enemies = [Enemy.spawn(ground_tiles) for _ in range(40)]
 
         items: list[Item] = []
         for x in range(20):
@@ -237,6 +237,12 @@ class Enemy(Entity, ABC):
             center=(self.rect.center[0], self.rect.center[1]))
         screen.blit(enemyNameText, enemyNameTextRect)
 
+    @staticmethod
+    def spawn(possible_locations: list[pygame.Vector2]) -> Enemy:
+        location = possible_locations[random.randint(0, len(possible_locations) - 1)]
+        enemy_type = random.choice(enemy_types)
+        return enemy_type(100, location)
+
 class Knight(Enemy):
     weapon_type = Sword
     name = "Knight"
@@ -258,14 +264,6 @@ class Soldier(Enemy):
     colour = (0, 0, 100)
 
 enemy_types: list[type[Enemy]] = [Knight, Soldier, Wizard]
-
-def spawn_enemies(number: int, possible_locations: list[pygame.Vector2]) -> list[Enemy]:
-    return_enemies: list[Enemy] = []
-    for x in range(number):
-        location = possible_locations[random.randint(0, len(possible_locations) - 1)]
-        enemy_type = random.choice(enemy_types)
-        return_enemies.append(enemy_type(100, location))
-    return return_enemies
 
 class Powerup(Item):
     time_remaining: int = 1000
