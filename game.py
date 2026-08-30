@@ -8,7 +8,7 @@ import pygame
 
 from consts import tileWidth, tileHeight, screen_height, screen_width, font2, WALL_COLOR, FLOOR_COLOR, GRID_COLOR, \
     FLOOR_NEXT_COL, PresetMaps
-from game_ui import UIBar
+from game_ui import UIBar, draw_rect_alpha
 
 
 class Difficulty(Enum):
@@ -297,15 +297,69 @@ class HealthBoost(Powerup):
 powerup_types: list[type[Powerup]] = [SpeedBoost, DamageBoost, HealthBoost]
 
 class Player(Entity):
-    inventory: list[Item | None]
+    inventory: Inventory
     powerups: list[Powerup]
 
     def __init__(self, health: float, position: pygame.Vector2, inventory: list[Item | None]):
         super().__init__(health, position, pygame.Rect(screen_width * 39/80, screen_height * 39/80, screen_width / 40, screen_height / 40))
-        self.inventory = inventory
+        self.inventory = Inventory(inventory)
         self.powerups = []
+
+def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Vector2:
+    if return_int:
+        return pygame.Vector2(int((((screen_width / 2) - position.x) / tileWidth) // 1),
+                              int((((screen_height / 2) - position.y) / tileHeight) // 1))
+    return pygame.Vector2((((screen_width / 2) - position.x) / tileWidth), (((screen_height / 2) - position.y) / tileHeight))
 
 @dataclasses.dataclass
 class SaveFile:
     difficulty: int | None
     game_state: GameState | None
+
+@dataclasses.dataclass
+class InvSlot:
+    item: Item | None
+    rect: pygame.Rect
+
+    def render(self, screen: pygame.Surface, slot_num: int, total_slots: int, active: bool) -> None:
+        if active: draw_rect_alpha(screen, (200, 200, 200, 128), self.rect)
+        if self.item:
+            item_rect = pygame.Rect(screen_width / 2 - (50 * total_slots - (100 * slot_num)) + 35, screen_height - 60 - 12.5, 30, 25)
+            pygame.draw.rect(screen, self.item.colour, item_rect)
+
+
+class Inventory:
+    slots: list[InvSlot] = []
+    background_rect: pygame.Rect
+    active_slot: int
+
+    def __init__(self, items: list[Item | None]):
+        self.active_slot = 0
+        for n, item in enumerate(items):
+            slot_rect = pygame.Rect((screen_width / 2) - (50 * len(items) - (100 * n)), screen_height - 100, 100, 80)
+            self.slots.append(InvSlot(item, pygame.Rect(slot_rect)))
+        self.background_rect = pygame.Rect((screen_width / 2) - (50 * len(items)), screen_height - 100,
+                                       100 * len(items), 80)
+
+    def render(self, screen: pygame.Surface) -> None:
+        draw_rect_alpha(screen, (0, 0, 0, 128), self.background_rect)
+        for n, slot in enumerate(self.slots):
+            slot.render(screen, n, len(self.slots), self.active_slot == n)
+
+    def drop_item(self, slot: int, game_state: GameState) -> None:
+        item = self.slots[slot].item
+        if item is None: return None
+        item.position = pygame.Vector2(get_grid_pos(game_state.player.position)[0],
+                       get_grid_pos(game_state.player.position)[1])
+        game_state.spawned_items.append(item)
+        self.slots[slot].item = None
+        return None
+
+    def handle_click(self, mouse_pos: pygame.Vector2, game_state: GameState) -> None:
+        if not self.background_rect.collidepoint(mouse_pos): return None
+        for n, slot in enumerate(self.slots):
+            if slot.rect.collidepoint(mouse_pos):
+                if self.active_slot == n: self.drop_item(n, game_state)
+                self.active_slot = n
+                break
+        return None

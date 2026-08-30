@@ -19,8 +19,8 @@ from consts import font2, font, font3, screen_width, tileWidth, screen_height, t
     FLOOR_NEXT_COL, gravity
 from file import GameFile, save_game
 from game import get_ground_map, get_ground_tiles, GameState, Wizard, Knight, Weapon, HealthBoost, Powerup, Player, \
-    Enemy, Gun, DamageBoost, Sword, Wand, SpeedBoost
-from game_ui import UIBar
+    Enemy, Gun, DamageBoost, Sword, Wand, SpeedBoost, get_grid_pos
+from game_ui import UIBar, draw_rect_alpha
 from menu import MainMenu, Button
 
 # Pygame initialisation
@@ -30,22 +30,11 @@ joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_coun
 screen = pygame.display.set_mode((1152, 648))
 pygame.display.set_caption('NEA')
 
-# TODO: Find another solution for debounce
-mouseNotUp = False
-ButtonNotUp = False
-TriggerNotUp = False
-
 # TODO: Fix globals needed for pathfinding
 tileRect: list[list[pygame.Rect]]
 enemiesToMove: list[list[int | tuple[int, int]]]
 pathGrid: list[str]
 grid: pathfinding.core.grid.Grid
-
-def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Vector2:
-    if return_int:
-        return pygame.Vector2(int((((screen_width / 2) - position.x) / tileWidth) // 1),
-                              int((((screen_height / 2) - position.y) / tileHeight) // 1))
-    return pygame.Vector2((((screen_width / 2) - position.x) / tileWidth), (((screen_height / 2) - position.y) / tileHeight))
 
 
 def do_pathfinding(game_state: GameState) -> None:
@@ -124,7 +113,6 @@ pathfindingThread = Thread(target=do_pathfinding)
 @dataclasses.dataclass
 class RenderedElements:
     tiles_rendered: list[list[pygame.Rect]]
-    inventory_background: pygame.Rect
 
 
 def render_map(game_state: GameState) -> list[list[pygame.Rect]]:
@@ -145,13 +133,19 @@ def render_frame(game_state: GameState) -> RenderedElements:
     render_items(game_state)
     render_enemies(game_state)
     pygame.draw.rect(screen, (0, 255, 0), game_state.player.rect)
-    inventory_background = render_inventory(game_state)
     render_UI(game_state)
-    return RenderedElements(tiles_rendered, inventory_background)
+    game_state.player.inventory.render(screen)
+    return RenderedElements(tiles_rendered)
+
+def handle_click(game_state: GameState, mouse_pos: pygame.Vector2) -> None:
+    if ((not game_state.player.inventory.background_rect.collidepoint(mouse_pos))
+            and game_state.player.inventory.slots[game_state.player.inventory.active_slot].item is not None):
+        attack(game_state, game_state.player)
+    game_state.player.inventory.handle_click(mouse_pos, game_state)
 
 
 def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
-    global pathfindingThread, attackMultiplierEnemies, timeSinceSpawnHealthBoosts, TriggerNotUp, tileRect, mouseNotUp
+    global pathfindingThread, attackMultiplierEnemies, timeSinceSpawnHealthBoosts, tileRect
 
     tileRect = render_data.tiles_rendered
     if CollectItem: collect_item(game_state)
@@ -159,18 +153,6 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
     if not pathfindingThread.is_alive():
         pathfindingThread = Thread(target=do_pathfinding, args=[game_state])
         pathfindingThread.start()
-
-    if (not render_data.inventory_background.collidepoint(pygame.mouse.get_pos())
-            and ((pygame.mouse.get_pressed()[0] and mouseNotUp == False)
-                 or ((joysticks and joysticks[0].get_axis(5) > 0.5) and TriggerNotUp == False))
-            and game_state.player.inventory[itemSelected] is not None):
-
-        if pygame.mouse.get_pressed()[0]:
-            mouseNotUp = True
-            attack(game_state, game_state.player)
-        if joysticks and joysticks[0].get_axis(5) > 0.5:
-            TriggerNotUp = True
-            attack(game_state, game_state.player, True)
 
     for enemy in game_state.enemies:
         distance = pygame.math.Vector2(abs(enemy.rect.x - game_state.player.rect.x),
@@ -183,8 +165,8 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
 
     manageBullets(game_state)
 
-    for item in game_state.player.inventory:
-        if isinstance(item, Weapon): item.time_since_attack += 1
+    for slot in game_state.player.inventory.slots:
+        if isinstance(slot.item, Weapon): slot.item.time_since_attack += 1
 
     health_boost_num = sum(
         1 for item in game_state.spawned_items
@@ -229,20 +211,12 @@ def respawn(game_state: GameState) -> None:
     ]
 
 
-def draw_rect_alpha(surface: pygame.Surface, color: tuple[int, int, int, int], rect: pygame.Rect) -> None:
-    # sourced from https://stackoverflow.com/questions/6339057/draw-a-transparent-rectangles-and-polygons-in-pygame
-    # draws a translucent rectangle on the screen
-    shape_surf = pygame.Surface(pygame.Rect(rect).size, pygame.SRCALPHA)
-    pygame.draw.rect(shape_surf, color, shape_surf.get_rect())
-    surface.blit(shape_surf, rect)
-
-
 attackStrength = random.randint(6, 9)
 
 
 def attack(game_state: GameState, origin: Player | Enemy, controller: bool = False) -> None:
     if isinstance(origin, Player):
-        weapon = origin.inventory[itemSelected]
+        weapon = origin.inventory.slots[origin.inventory.active_slot].item
         if not isinstance(weapon, Weapon): raise RuntimeError("Player attempted to attack with powerup")
     else:
         weapon = origin.weapon
@@ -391,9 +365,9 @@ def collect_item(game_state: GameState) -> None:
                 game_state.player.rect.y - item.rect[1]) < 100):
             continue
         if isinstance(item, Weapon):
-            for i in range(len(game_state.player.inventory)):
-                if not game_state.player.inventory[i]:
-                    game_state.player.inventory[i] = item
+            for i in range(len(game_state.player.inventory.slots)):
+                if not game_state.player.inventory.slots[i].item:
+                    game_state.player.inventory.slots[i].item = item
                     game_state.spawned_items.remove(item)
                     break
             return
@@ -478,62 +452,6 @@ def render_enemies(given_state: GameState) -> None:
     for enemy in given_state.enemies:
         enemy.render(given_state, screen)
 
-
-itemSelected = 0
-
-
-def render_inventory(game_state: GameState) -> pygame.Rect:
-    global itemSelected, mouseNotUp, ButtonNotUp
-
-    inventory_background = pygame.Rect((screen_width / 2) - (50 * len(game_state.player.inventory)), screen_height - 100,
-                                       100 * len(game_state.player.inventory), 80)
-    draw_rect_alpha(screen, (0, 0, 0, 128), inventory_background)
-
-    rendered_inv = []
-    rendered_inv_items: dict[int, pygame.Rect] = {}
-    for n, item in enumerate(game_state.player.inventory):
-        rendered_inv.append(
-            pygame.Rect((screen_width / 2) - (50 * len(game_state.player.inventory) - (100 * n)), screen_height - 100,
-                        100, 80))
-        if n == itemSelected: draw_rect_alpha(screen, (200, 200, 200, 128), rendered_inv[n])
-        if item:
-            rendered_inv_items[n] = (
-                pygame.Rect(screen_width / 2 - (50 * len(game_state.player.inventory) - (100 * n)) + 35,
-                            screen_height - 60 - 12.5, 30, 25))
-            pygame.draw.rect(screen, item.colour, rendered_inv_items[n])
-
-    inventory_slot_pressed: list[bool] = [
-        (pygame.mouse.get_pressed()[0] and rendered_inv[n].collidepoint(pygame.mouse.get_pos()) and mouseNotUp == False)
-        for n in range(len(rendered_inv))
-    ]
-
-    controller_drop_pressed: bool = joysticks != [] and joysticks[0].get_button(1)
-
-    # drop item
-    current_item = game_state.player.inventory[itemSelected]
-    current_item_pressed = inventory_slot_pressed[itemSelected]
-    if (current_item_pressed or controller_drop_pressed) and current_item is not None:
-        current_item.position = pygame.Vector2(get_grid_pos(game_state.player.position)[0],
-                                               get_grid_pos(game_state.player.position)[1])
-        game_state.spawned_items.append(current_item)
-        game_state.player.inventory[itemSelected] = None
-        if pygame.mouse.get_pressed()[0]:
-            mouseNotUp = True
-        if joysticks and joysticks[0].get_button(1):
-            ButtonNotUp = True
-
-    # switch inventory slots
-    for x in range(len(rendered_inv)):
-        if inventory_slot_pressed[x]:
-            itemSelected = x
-            mouseNotUp = True
-
-    controller_inv_button = [4, 5]
-    if joysticks and joysticks[0].get_button(controller_inv_button[0]): itemSelected -= 1
-    if joysticks and joysticks[0].get_button(controller_inv_button[1]): itemSelected += 1
-
-    return inventory_background
-
 CollectItem = False
 
 clock = pygame.time.Clock()
@@ -546,6 +464,9 @@ while True:
 
     for event in pygame.event.get():
         if game_file is None: main_menu.handle_input(event)
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if game_file is not None:
+                handle_click(game_file.game_state, pygame.Vector2(pygame.mouse.get_pos()))
         if event.type == pygame.JOYBUTTONDOWN:
             if event.button == 0:
                 if jumping == False:
@@ -562,13 +483,10 @@ while True:
                 if jumping == True:
                     jumping = False
                     jumpCount = 0
-            ButtonNotUp = False
         if event.type == QUIT:
             if game_file is not None: save_game(game_file)
             pygame.quit()
             sys.exit()
-        if event.type == pygame.MOUSEBUTTONUP:
-            mouseNotUp = False
         if event.type == pygame.KEYDOWN:
             if game_file is not None:
                 if event.key == pygame.K_ESCAPE:
@@ -602,10 +520,6 @@ while True:
             onGroundMap = get_ground_map(game_file.game_state.tile_map, onGround)
 
 
-    if (joysticks and joysticks[0].get_axis(5) < 0.5):
-        TriggerNotUp = False
-    if joysticks and joysticks[0].get_axis(4) < 0.5:
-        ButtonNotUp = False
     keys = pygame.key.get_pressed()
 
     if game_file is not None:
