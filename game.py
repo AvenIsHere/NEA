@@ -31,10 +31,10 @@ class GameState:
 
     @classmethod
     def new_game(cls, difficulty: Difficulty) -> GameState:
-        player = Player(100, pygame.Vector2(90, -10), [None, None])
         world_map = generate_map(PresetMaps, 5, 5)
-
         ground_tiles = get_ground_tiles(world_map)
+
+        player = Player(100, random.choice(ground_tiles), [None, None])
 
         enemies = [Enemy.spawn(ground_tiles) for _ in range(40)]
 
@@ -185,7 +185,7 @@ class Gun(Weapon):
         if self.time_since_attack <= self.cooldown:
             return
 
-        given_state.bullets_fired.append(Bullet(location, direction, self.strength * attack_multiplier, shot_by))
+        given_state.bullets_fired.append(Bullet(location.copy(), direction, self.strength * attack_multiplier, shot_by))
         self.cooldown = random.randint(10, 15)
 
         self.time_since_attack = 0
@@ -199,7 +199,7 @@ class Wand(Weapon):
         if self.time_since_attack <= self.cooldown:
             return
 
-        given_state.wand_magic_fired.append(WandMagicThing(location, 0, target, self.strength * attack_multiplier))
+        given_state.wand_magic_fired.append(WandMagicThing(location.copy(), 0, target, self.strength * attack_multiplier))
         self.cooldown = random.randint(100, 150)
 
         self.time_since_attack = 0
@@ -228,8 +228,8 @@ class Enemy(Entity, ABC):
 
     def render(self, game_state: GameState, screen: pygame.Surface) -> None:
         self.rect = pygame.Rect(
-            (tileWidth * (self.position[0])) + game_state.player.position[0],
-            (tileHeight * (self.position[1])) + game_state.player.position[1] + tileHeight - (
+            (tileWidth * (self.position[0])) + get_camera_offset(game_state.player.position)[0],
+            (tileHeight * (self.position[1])) + get_camera_offset(game_state.player.position)[1] + tileHeight - (
                     screen_height / 30) + 1,
             screen_width / 30, screen_height / 30)
         pygame.draw.rect(screen, self.colour, self.rect)
@@ -334,7 +334,7 @@ class Player(Entity):
         if isinstance(weapon, Gun):
             angle = math.atan2((pygame.mouse.get_pos()[1] - self.rect.centery), (pygame.mouse.get_pos()[0] - self.rect.centerx))
             attack_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in self.powerups) else 2
-            weapon.shoot(game_state, self, get_grid_pos(self.position, False), angle, attack_multiplier)
+            weapon.shoot(game_state, self, self.position, angle, attack_multiplier)
         elif isinstance(weapon, Sword):
             for x in range(len(game_state.enemies)):
                 if abs(game_state.enemies[x].rect.centerx - self.rect.centerx) < 50 and abs(game_state.enemies[x].rect.centery - self.rect.centery) < 50:
@@ -348,13 +348,19 @@ class Player(Entity):
                     shortestDistance = enemy, distanceToX.length()
             if shortestDistance[1] < 300 and shortestDistance[0] is not None:
                 attack_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in game_state.player.powerups) else 2
-                weapon.fire(game_state, shortestDistance[0], get_grid_pos(self.position, False), attack_multiplier)
+                weapon.fire(game_state, shortestDistance[0], self.position, attack_multiplier)
 
 def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Vector2:
     if return_int:
         return pygame.Vector2(int((((screen_width / 2) - position.x) / tileWidth) // 1),
                               int((((screen_height / 2) - position.y) / tileHeight) // 1))
     return pygame.Vector2((((screen_width / 2) - position.x) / tileWidth), (((screen_height / 2) - position.y) / tileHeight))
+
+def get_camera_offset(player_pos: pygame.Vector2) -> pygame.Vector2:
+    return pygame.Vector2(
+        (screen_width / 2) - (player_pos.x * tileWidth),
+        (screen_height / 2) - (player_pos.y * tileHeight)
+    )
 
 @dataclasses.dataclass
 class SaveFile:
@@ -394,8 +400,7 @@ class Inventory:
     def drop_item(self, slot: int, game_state: GameState) -> None:
         item = self.slots[slot].item
         if item is None: return None
-        item.position = pygame.Vector2(get_grid_pos(game_state.player.position)[0],
-                       get_grid_pos(game_state.player.position)[1])
+        item.position = game_state.player.position.copy()
         game_state.spawned_items.append(item)
         self.slots[slot].item = None
         return None

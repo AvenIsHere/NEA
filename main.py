@@ -17,9 +17,10 @@ from pygame.locals import QUIT
 
 from consts import font2, font, font3, screen_width, tileWidth, screen_height, tileHeight, GRID_COLOR, WALL_COLOR, \
     FLOOR_NEXT_COL, gravity
+from enemy_pathfinding import PathfindingThread
 from file import GameFile, save_game
 from game import get_ground_map, get_ground_tiles, GameState, Wizard, Knight, Weapon, HealthBoost, Powerup, Player, \
-    Enemy, DamageBoost, SpeedBoost, get_grid_pos
+    Enemy, DamageBoost, SpeedBoost, get_camera_offset
 from game_ui import UIBar, draw_rect_alpha
 from menu import MainMenu, Button
 
@@ -43,50 +44,51 @@ def do_pathfinding(game_state: GameState) -> None:
         enemiesToMove = []
         grid = Grid(matrix=onGroundMap)
         for x in range(len(game_state.enemies)):
-            if abs(get_grid_pos(game_state.player.position)[0] - int(
+            if not (abs(game_state.player.position[0] - int(
                     game_state.enemies[x].position[0] // 1)) <= 21 and abs(
-                    get_grid_pos(game_state.player.position)[1] - int(game_state.enemies[x].position[1] // 1)) <= 21:
-                start = grid.node(int(game_state.enemies[x].position[0] // 1),
-                                  int(game_state.enemies[x].position[1] // 1))
-                end = grid.node(int(get_grid_pos(game_state.player.position)[0]),
-                                int(get_grid_pos(game_state.player.position)[1]))
-                finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
-                path, runs = finder.find_path(start, end, grid)
-                pathGrid = grid.grid_str(path=path, start=start, end=end).split('\n')
-                if isinstance(game_state.enemies[x], Wizard):
-                    for l in range(len(pathGrid)):
-                        if 'se' in pathGrid[l] and not '#se' in pathGrid[l]:
-                            n = int(get_grid_pos(game_state.player.position)[0] // 1) - 2
-                            enemiesToMove.append((x, (n, l)))
-                        elif 'es' in pathGrid[l] and not 'es#' in pathGrid[l]:
-                            n = int(get_grid_pos(game_state.player.position)[0] // 1) + 2
-                            enemiesToMove.append((x, (n, l)))
-                        elif 'sxxe' in pathGrid[l] or 'exxs' in pathGrid[l]:
-                            pass
-                        elif 'x' in pathGrid[l]:
-                            sLocation, eLocation = None, None
-                            for z in range(len(pathGrid[l])):
-                                if pathGrid[l][z] == 's':
-                                    sLocation = z
-                            for z in range(len(pathGrid[l])):
-                                if pathGrid[l][z] == 'e':
-                                    eLocation = z
-                            if sLocation is None or eLocation is None: continue
-                            if sLocation < eLocation:
-                                n = int(get_grid_pos(game_state.player.position)[0] // 1) - 1
-                            else:
-                                n = int(get_grid_pos(game_state.player.position)[0] // 1) + 1
-                            enemiesToMove.append((x, (n, l)))
-                elif isinstance(game_state.enemies[x], Knight):
-                    for l in range(len(pathGrid)):
-                        if 'x' in pathGrid[l] or 'se' in pathGrid[l] or 'es' in pathGrid[l]:
-                            n = None
-                            for i in reversed(range(len(pathGrid[l]))):
-                                if pathGrid[l][i] == 'x' or (pathGrid[l][i] == 'e' and (
-                                        pathGrid[l][i - 1] == 's' or pathGrid[l][i + 1] == 's')):
-                                    n = int(get_grid_pos(game_state.player.position)[0])
-                            if n is None: continue
-                            enemiesToMove.append((x, (n, l)))
+                    game_state.player.position[1] - int(game_state.enemies[x].position[1] // 1)) <= 21):
+                continue
+            start = grid.node(int(game_state.enemies[x].position[0] // 1),
+                              int(game_state.enemies[x].position[1] // 1))
+            end = grid.node(int(game_state.player.position[0]),
+                            int(game_state.player.position[1]))
+            finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
+            path, runs = finder.find_path(start, end, grid)
+            pathGrid = grid.grid_str(path=path, start=start, end=end).split('\n')
+            if isinstance(game_state.enemies[x], Wizard):
+                for l in range(len(pathGrid)):
+                    if 'se' in pathGrid[l] and not '#se' in pathGrid[l]:
+                        n = int(game_state.player.position[0] // 1) - 2
+                        enemiesToMove.append((x, (n, l)))
+                    elif 'es' in pathGrid[l] and not 'es#' in pathGrid[l]:
+                        n = int(game_state.player.position[0] // 1) + 2
+                        enemiesToMove.append((x, (n, l)))
+                    elif 'sxxe' in pathGrid[l] or 'exxs' in pathGrid[l]:
+                        pass
+                    elif 'x' in pathGrid[l]:
+                        sLocation, eLocation = None, None
+                        for z in range(len(pathGrid[l])):
+                            if pathGrid[l][z] == 's':
+                                sLocation = z
+                        for z in range(len(pathGrid[l])):
+                            if pathGrid[l][z] == 'e':
+                                eLocation = z
+                        if sLocation is None or eLocation is None: continue
+                        if sLocation < eLocation:
+                            n = int(game_state.player.position[0] // 1) - 1
+                        else:
+                            n = int(game_state.player.position[0] // 1) + 1
+                        enemiesToMove.append((x, (n, l)))
+            elif isinstance(game_state.enemies[x], Knight):
+                for l in range(len(pathGrid)):
+                    if 'x' in pathGrid[l] or 'se' in pathGrid[l] or 'es' in pathGrid[l]:
+                        n = None
+                        for i in reversed(range(len(pathGrid[l]))):
+                            if pathGrid[l][i] == 'x' or (pathGrid[l][i] == 'e' and (
+                                    pathGrid[l][i - 1] == 's' or pathGrid[l][i + 1] == 's')):
+                                n = int(game_state.player.position[0])
+                        if n is None: continue
+                        enemiesToMove.append((x, (n, l)))
         pathTicks = 50
     if enemiesToMove:
         for x in range(len(enemiesToMove)):
@@ -111,7 +113,7 @@ def render_UI(game_state: GameState) -> None:
         ui_bar.render(screen, pygame.Vector2(20, 20 + (i * 50)))
 
 
-pathfindingThread = Thread(target=do_pathfinding)
+pathfindingThread: PathfindingThread
 
 
 @dataclasses.dataclass
@@ -124,8 +126,8 @@ def render_map(game_state: GameState) -> list[list[pygame.Rect]]:
     for x, colour in enumerate(game_state.tile_map, start=0):
         tiles_rendered.append([])
         for y, tileColour in enumerate(colour, start=0):
-            tiles_rendered[x].append(pygame.Rect(((tileWidth) * (x)) + game_state.player.position[0],
-                                                 ((tileHeight) * (y)) + game_state.player.position[1],
+            tiles_rendered[x].append(pygame.Rect(((tileWidth) * (x)) + get_camera_offset(game_state.player.position)[0],
+                                                 ((tileHeight) * (y)) + get_camera_offset(game_state.player.position)[1],
                                                  tileWidth + 1, tileHeight + 1))
             pygame.draw.rect(screen, tileColour, tiles_rendered[x][y])
     return tiles_rendered
@@ -148,9 +150,9 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
     tileRect = render_data.tiles_rendered
     if CollectItem: collect_item(game_state)
 
-    if not pathfindingThread.is_alive():
-        pathfindingThread = Thread(target=do_pathfinding, args=[game_state])
-        pathfindingThread.start()
+    if not pathfindingThread.thread.is_alive():
+        pathfindingThread.thread = Thread(target=pathfindingThread.do_tick)
+        pathfindingThread.thread.start()
 
     for enemy in game_state.enemies:
         distance = pygame.math.Vector2(abs(enemy.rect.x - game_state.player.rect.x),
@@ -201,7 +203,7 @@ def wonGame(game_state: GameState) -> None:
 
 def respawn(game_state: GameState) -> None:
     game_state.player.health = 100
-    game_state.player.position = pygame.Vector2(90, -10)
+    game_state.player.position = random.choice(get_ground_tiles(game_state.tile_map))
     game_state.enemies = [Enemy.spawn(onGround) for _ in range(40)]
     game_state.ui_bars = [
         UIBar("Health remaining", (200, 25, 25), lambda: game_state.player.health / 100),
@@ -216,8 +218,8 @@ def manageBullets(given_state: GameState) -> None:
     breakForLoop = False
     for magic in given_state.wand_magic_fired:
         if isinstance(magic.target, Player):
-            target_grid_pos = get_grid_pos(magic.target.position, False)
-            dx, dy = (target_grid_pos[0] - (magic.position[0]), target_grid_pos[1] - (magic.position[1]))
+            target_pos = magic.target.position
+            dx, dy = (target_pos[0] - (magic.position[0]), target_pos[1] - (magic.position[1]))
             stepx, stepy = (dx / 25, dy / 25)
             magic.position = pygame.Vector2(magic.position[0] + stepx, magic.position[1] + stepy)
             magic.rect = pygame.Rect(((tileWidth) * (magic.position[0])) + given_state.player.position[0],
@@ -345,8 +347,8 @@ def render_items(game_state: GameState) -> None:
     width = screen_width / 30
     height = screen_height / 30
     for x, item in enumerate(game_state.spawned_items):
-        item.rect = pygame.Rect(((tileWidth) * (item.position[0])) + game_state.player.position[0],
-                                   ((tileHeight) * (item.position[1])) + game_state.player.position[
+        item.rect = pygame.Rect(((tileWidth) * (item.position[0])) + get_camera_offset(game_state.player.position)[0],
+                                   ((tileHeight) * (item.position[1])) + get_camera_offset(game_state.player.position)[
                                        1] + tileHeight - height + 1, width, height)
         if isinstance(item, Powerup):
             pygame.draw.rect(screen, item.colour, item.rect)
@@ -368,33 +370,10 @@ def render_items(game_state: GameState) -> None:
 
 def jump(game_state: GameState) -> None:
     global jumpCount, jumping
-    if jumpCount < 20:
-        move = pygame.math.Vector2(0, -((screen_width / 800) * (0.1 * jumpCount)) - gravity - (screen_width / 800))
-    else:
-        move = pygame.math.Vector2(0, -(screen_width / 600) - gravity - (screen_width / 800))
-    nextPlayer_y = game_state.player.rect.move(0, move.y)
-    for x, tileRectRow in enumerate(tileRect):
-        for y, tileRectRowColumn in enumerate(tileRectRow):
-            if nextPlayer_y.colliderect(tileRect[x][y]) and (
-                    game_state.tile_map[x][y] == GRID_COLOR or game_state.tile_map[x][y] == WALL_COLOR or game_state.tile_map[x][
-                y] == FLOOR_NEXT_COL) and tileRect[x][y].top < nextPlayer_y.top:
-                if move.y > 0:  # moving down
-                    move.y = 0
-                elif move.y < 0:  # moving up
-                    move.y = 0
-                break
-
-    if game_state.player.position[1] <= -1776:
-        if move.y > 0:
-            move.y = 0
-        game_state.player.position[1] = -1776
-
-    if game_state.player.position[1] >= 315.2:
-        if move.y < 0:
-            move.y = 0
-        game_state.player.position[1] = 315.2
-
-    game_state.player.position[1] -= move.y
+    amount = 0.1
+    mult = 0.05 * jumpCount if jumpCount < 40 else 2
+    move = pygame.math.Vector2(0, -amount * mult)
+    game_state.player.position += move
     jumpCount += 1
 
 
@@ -421,7 +400,7 @@ while True:
                 game_file.game_state.handle_click(pygame.Vector2(pygame.mouse.get_pos()))
         if event.type == pygame.JOYBUTTONDOWN:
             if event.button == 0:
-                if jumping == False:
+                if not jumping:
                     jumping = True
                     jumpCount = 0
             if event.button == 7:
@@ -432,7 +411,7 @@ while True:
                 CollectItem = True
         if event.type == pygame.JOYBUTTONUP:
             if event.button == 0:
-                if jumping == True:
+                if jumping:
                     jumping = False
                     jumpCount = 0
         if event.type == QUIT:
@@ -446,19 +425,19 @@ while True:
                     pygame.quit()
                     sys.exit()
                 if event.key == pygame.K_SPACE:
-                    if jumping == False:
+                    if not jumping:
                         jumping = True
                         jumpCount = 0
 
                 if event.key == pygame.K_h:
-                    game_file.game_state.player.position = pygame.Vector2(screen_width, 0)
+                    game_file.game_state.player.position = random.choice(get_ground_tiles(game_file.game_state.tile_map))
                 if event.key == pygame.K_e:
                     CollectItem = True
             # if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
             #     toggleFullscreen()
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_SPACE:
-                if jumping == True:
+                if jumping:
                     jumping = False
                     jumpCount = 0
     screen.fill((20, 20, 20))
@@ -470,6 +449,7 @@ while True:
             pathTicks = 0
             onGround = get_ground_tiles(game_file.game_state.tile_map)
             onGroundMap = get_ground_map(game_file.game_state.tile_map, onGround)
+            pathfindingThread = PathfindingThread(game_file.game_state, onGround)
 
 
     keys = pygame.key.get_pressed()
@@ -499,12 +479,12 @@ while True:
             right = 1
 
         if joysticks and joysticks[0].get_axis(4) > 0.5:
-            if jumping == False:
+            if not jumping:
                 jumping = True
                 jumpCount = 0
         elif (joysticks and joysticks[0].get_axis(4) < 0.5) and not joysticks[0].get_button(0) and not key[
             pygame.K_SPACE]:
-            if jumping == True:
+            if jumping:
                 jumping = False
                 jumpCount = 0
 
@@ -513,25 +493,13 @@ while True:
                 jump(game_file.game_state)
 
             move = pygame.math.Vector2(right - left, 0)
-            if not jumping:
-                move.y -= gravity
+            move.y -= gravity
             if move.length_squared() > 0:
                 speed = 400 if not any(isinstance(x, SpeedBoost) for x in game_file.game_state.player.powerups) else 300
                 move.scale_to_length(screen_width / speed)
 
-                nextPlayer_x = game_file.game_state.player.rect.move(move.x, 0)
-                for x, tileRectRow in enumerate(tileRect):
-                    for y, tileRectRowColumn in enumerate(tileRectRow):
-                        if nextPlayer_x.colliderect(tileRect[x][y]) and (
-                                game_file.game_state.tile_map[x][y] == GRID_COLOR or game_file.game_state.tile_map[x][y] == WALL_COLOR or game_file.game_state.tile_map[x][
-                            y] == FLOOR_NEXT_COL):
-                            if move.x > 0:  # moving right
-                                move.x = 0
-                            elif move.x < 0:  # moving left
-                                move.x = 0
-                            break
-
-                nextPlayer_y = game_file.game_state.player.rect.move(0, move.y)
+                nextPlayer_x = game_file.game_state.player.rect.copy().move(move.x, 0)
+                nextPlayer_y = game_file.game_state.player.rect.copy().move(0, move.y)
                 for x, tileRectRow in enumerate(tileRect):
                     for y, tileRectRowColumn in enumerate(tileRectRow):
                         if nextPlayer_y.colliderect(tileRect[x][y]) and (
@@ -541,27 +509,33 @@ while True:
                                 move.y = 0
                             elif move.y < 0:  # moving up
                                 move.y = 0
-                            break
+                        if nextPlayer_x.colliderect(tileRect[x][y]) and (
+                                game_file.game_state.tile_map[x][y] == GRID_COLOR or game_file.game_state.tile_map[x][y] == WALL_COLOR or game_file.game_state.tile_map[x][
+                            y] == FLOOR_NEXT_COL):
+                            if move.x > 0:  # moving right
+                                move.x = 0
+                            elif move.x < 0:  # moving left
+                                move.x = 0
 
-                if game_file.game_state.player.position[0] <= -3268.8:
-                    if move.x > 0:
-                        move.x = 0
-                    game_file.game_state.player.position[0] = -3268.8
-                if game_file.game_state.player.position[0] >= 561:
+                if game_file.game_state.player.position.x <= 0:
                     if move.x < 0:
                         move.x = 0
-                    game_file.game_state.player.position[0] = 561
-                if game_file.game_state.player.position[1] <= -1776:
-                    if move.y > 0:
-                        move.y = 0
-                    game_file.game_state.player.position[1] = -1776
-                if game_file.game_state.player.position[1] >= 315.2:
+                    game_file.game_state.player.position.x = 0
+                if game_file.game_state.player.position.x > len(game_file.game_state.tile_map):
+                    if move.x > 0:
+                        move.x = 0
+                    game_file.game_state.player.position.x = len(game_file.game_state.tile_map)
+                if game_file.game_state.player.position.y <= 0:
                     if move.y < 0:
                         move.y = 0
-                    game_file.game_state.player.position[1] = 315.2
+                    game_file.game_state.player.position.y = 0
+                if game_file.game_state.player.position.y > len(game_file.game_state.tile_map[0]):
+                    if move.y > 0:
+                        move.y = 0
+                    game_file.game_state.player.position.y = len(game_file.game_state.tile_map[0])
 
-                game_file.game_state.player.position[0] -= move.x
-                game_file.game_state.player.position[1] -= move.y
+                game_file.game_state.player.position[0] += move.x / tileWidth
+                game_file.game_state.player.position[1] += move.y / tileHeight
 
     if CollectItem:
         CollectItem = False
