@@ -138,7 +138,7 @@ def render_frame(game_state: GameState) -> RenderedElements:
     tiles_rendered = render_map(game_state)
     render_items(game_state)
     render_enemies(game_state)
-    pygame.draw.rect(screen, (0, 255, 0), game_state.player.rect)
+    game_state.player.render(screen)
     render_UI(game_state)
     game_state.player.inventory.render(screen)
     return RenderedElements(tiles_rendered)
@@ -146,6 +146,8 @@ def render_frame(game_state: GameState) -> RenderedElements:
 
 def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
     global pathfindingThread, attackMultiplierEnemies, timeSinceSpawnHealthBoosts, tileRect
+
+    game_state.player.move(game_state.tile_map)
 
     tileRect = render_data.tiles_rendered
     if CollectItem: collect_item(game_state)
@@ -155,6 +157,7 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
         pathfindingThread.thread.start()
 
     for enemy in game_state.enemies:
+        enemy.move(game_state.tile_map)
         distance = pygame.math.Vector2(abs(enemy.rect.x - game_state.player.rect.x),
                                        abs(enemy.rect.y - game_state.player.rect.y))
         if isinstance(enemy, Knight) and distance.length() < 40:
@@ -371,9 +374,9 @@ def render_items(game_state: GameState) -> None:
 def jump(game_state: GameState) -> None:
     global jumpCount, jumping
     amount = 0.1
-    mult = 0.05 * jumpCount if jumpCount < 40 else 2
+    mult = 0.05 if jumpCount < 40 else 0
     move = pygame.math.Vector2(0, -amount * mult)
-    game_state.player.position += move
+    game_state.player.current_speed += move
     jumpCount += 1
 
 
@@ -389,6 +392,8 @@ clock = pygame.time.Clock()
 
 main_menu = MainMenu()
 game_file: GameFile | None = None
+
+jumpCount: int = 0
 
 while True:
     pygame.display.update()
@@ -428,7 +433,10 @@ while True:
                     if not jumping:
                         jumping = True
                         jumpCount = 0
-
+                if event.key == pygame.K_d:
+                    game_file.game_state.player.current_speed.x += 0.016
+                if event.key == pygame.K_a:
+                    game_file.game_state.player.current_speed.x -= 0.016
                 if event.key == pygame.K_h:
                     game_file.game_state.player.position = random.choice(get_ground_tiles(game_file.game_state.tile_map))
                 if event.key == pygame.K_e:
@@ -437,9 +445,15 @@ while True:
             #     toggleFullscreen()
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_SPACE:
-                if jumping:
+                if game_file is not None and jumping:
+                    game_file.game_state.player.current_speed.y -= -0.1 * 0.05 * (40 if jumpCount > 40 else jumpCount)
                     jumping = False
                     jumpCount = 0
+            if game_file is not None:
+                if event.key == pygame.K_d:
+                    game_file.game_state.player.current_speed.x -= 0.016
+                if event.key == pygame.K_a:
+                    game_file.game_state.player.current_speed.x += 0.016
     screen.fill((20, 20, 20))
 
     if game_file is None:
@@ -462,80 +476,9 @@ while True:
 
         key = pygame.key.get_pressed()
 
-        left: float = 0
-        right: float = 0
-
-        for x in range(len(joysticks)):
-            if joysticks[x].get_axis(0) > 0.25:
-                right = (abs(joysticks[x].get_axis(0)) - 0.25) * (4 / 3)
-            if joysticks[x].get_axis(0) < -0.5:
-                left = (abs(joysticks[x].get_axis(0)) - 0.25) * (4 / 3)
-
-        left += key[pygame.K_a] or key[pygame.K_LEFT]
-        if left > 1:
-            left = 1
-        right += key[pygame.K_d] or key[pygame.K_RIGHT]
-        if right > 1:
-            right = 1
-
-        if joysticks and joysticks[0].get_axis(4) > 0.5:
-            if not jumping:
-                jumping = True
-                jumpCount = 0
-        elif (joysticks and joysticks[0].get_axis(4) < 0.5) and not joysticks[0].get_button(0) and not key[
-            pygame.K_SPACE]:
-            if jumping:
-                jumping = False
-                jumpCount = 0
-
         if not game_file.game_state.player.health <= 0:
             if jumping:
                 jump(game_file.game_state)
-
-            move = pygame.math.Vector2(right - left, 0)
-            move.y -= gravity
-            if move.length_squared() > 0:
-                speed = 400 if not any(isinstance(x, SpeedBoost) for x in game_file.game_state.player.powerups) else 300
-                move.scale_to_length(screen_width / speed)
-
-                nextPlayer_x = game_file.game_state.player.rect.copy().move(move.x, 0)
-                nextPlayer_y = game_file.game_state.player.rect.copy().move(0, move.y)
-                for x, tileRectRow in enumerate(tileRect):
-                    for y, tileRectRowColumn in enumerate(tileRectRow):
-                        if nextPlayer_y.colliderect(tileRect[x][y]) and (
-                                game_file.game_state.tile_map[x][y] == GRID_COLOR or game_file.game_state.tile_map[x][y] == WALL_COLOR or game_file.game_state.tile_map[x][
-                            y] == FLOOR_NEXT_COL):
-                            if move.y > 0:  # moving down
-                                move.y = 0
-                            elif move.y < 0:  # moving up
-                                move.y = 0
-                        if nextPlayer_x.colliderect(tileRect[x][y]) and (
-                                game_file.game_state.tile_map[x][y] == GRID_COLOR or game_file.game_state.tile_map[x][y] == WALL_COLOR or game_file.game_state.tile_map[x][
-                            y] == FLOOR_NEXT_COL):
-                            if move.x > 0:  # moving right
-                                move.x = 0
-                            elif move.x < 0:  # moving left
-                                move.x = 0
-
-                if game_file.game_state.player.position.x <= 0:
-                    if move.x < 0:
-                        move.x = 0
-                    game_file.game_state.player.position.x = 0
-                if game_file.game_state.player.position.x > len(game_file.game_state.tile_map):
-                    if move.x > 0:
-                        move.x = 0
-                    game_file.game_state.player.position.x = len(game_file.game_state.tile_map)
-                if game_file.game_state.player.position.y <= 0:
-                    if move.y < 0:
-                        move.y = 0
-                    game_file.game_state.player.position.y = 0
-                if game_file.game_state.player.position.y > len(game_file.game_state.tile_map[0]):
-                    if move.y > 0:
-                        move.y = 0
-                    game_file.game_state.player.position.y = len(game_file.game_state.tile_map[0])
-
-                game_file.game_state.player.position[0] += move.x / tileWidth
-                game_file.game_state.player.position[1] += move.y / tileHeight
 
     if CollectItem:
         CollectItem = False

@@ -103,12 +103,15 @@ def get_ground_map(tile_map: list[list[tuple[int, int, int]]], ground_tiles: lis
 class Entity(ABC):
     health: float
     position: pygame.Vector2
+    size: pygame.Vector2
     rect: pygame.Rect
 
-    def __init__(self, health: float, position: pygame.Vector2, rect: pygame.Rect):
+    def __init__(self, health: float, position: pygame.Vector2, size: pygame.Vector2):
         self.health = health
         self.position = position
-        self.rect = rect
+        self.size = size
+        self.rect = pygame.Rect((tileWidth * (position[0])),
+                                                    (tileHeight * (position[1])), size.x, size.y)
 
 
 class Item(Entity, ABC):
@@ -116,8 +119,7 @@ class Item(Entity, ABC):
     colour: ClassVar[tuple[int, int, int]]
 
     def __init__(self, location: pygame.Vector2):
-        super().__init__(1.0, location, pygame.Rect((tileWidth * (location[0])),
-                                                    (tileHeight * (location[1])) + tileHeight - (screen_height / 30) + 1, (screen_width / 30), (screen_height / 30)))
+        super().__init__(1.0, location, pygame.Vector2(0.7, 0.7))
 
 
 class Bullet(Entity):
@@ -126,7 +128,7 @@ class Bullet(Entity):
     shot_by: Entity
 
     def __init__(self, position: pygame.Vector2, direction: float, damage: float, shot_by: Entity):
-        super().__init__(0.1, position, pygame.Rect(0, 0, 10, 10))
+        super().__init__(0.1, position, pygame.Vector2(0.3, 0.3))
         self.direction = direction
         self.damage = damage
         self.shot_by = shot_by
@@ -139,8 +141,7 @@ class WandMagicThing(Entity):
     damage: float
 
     def __init__(self, position: pygame.Vector2, age: int, target: Entity, damage: float):
-        super().__init__(0.1, position, pygame.Rect((tileWidth * (position[0])), (tileHeight * (position[1])),
-                                                    target.rect.width / 4, target.rect.width / 4))
+        super().__init__(0.1, position, pygame.Vector2(0.2, 0.2))
         self.age = age
         self.target = target
         self.damage = damage
@@ -213,25 +214,27 @@ def new_weapon(location: pygame.Vector2, weapon_type: type[Weapon] | None = None
 
 
 class Enemy(Entity, ABC):
+
+    # Enemy type info
     name: str
     initial: str
     colour: tuple[int, int, int]
-    weapon: Weapon
     weapon_type: ClassVar[type[Weapon]]
 
+    # Enemy-specific info
+    weapon: Weapon
+    current_speed: pygame.Vector2
+
     def __init__(self, health: int, location: pygame.Vector2):
-        super().__init__(health, location, pygame.Rect((tileWidth * (location[0])),
-                                                       (tileHeight * (location[1])) + tileHeight - (
-                                                               screen_height / 30) + 1,
-                                                       screen_width / 30, screen_height / 30))
+        super().__init__(health, location, pygame.Vector2(0.75, 0.75))
         self.weapon = new_weapon(location, self.weapon_type)
+        self.current_speed = pygame.Vector2(0, 0)
 
     def render(self, game_state: GameState, screen: pygame.Surface) -> None:
         self.rect = pygame.Rect(
-            (tileWidth * (self.position[0])) + get_camera_offset(game_state.player.position)[0],
-            (tileHeight * (self.position[1])) + get_camera_offset(game_state.player.position)[1] + tileHeight - (
-                    screen_height / 30) + 1,
-            screen_width / 30, screen_height / 30)
+            (tileWidth * self.position[0]) + get_camera_offset(game_state.player.position)[0],
+            (tileHeight * self.position[1]) + get_camera_offset(game_state.player.position)[1] + (tileHeight * (1-self.size.y)),
+            tileWidth * self.size.x, tileHeight * self.size.y)
         pygame.draw.rect(screen, self.colour, self.rect)
         if abs(self.rect.x - game_state.player.rect.x) < 100 and abs(
                 self.rect.y - game_state.player.rect.y) < 100:
@@ -243,6 +246,27 @@ class Enemy(Entity, ABC):
         enemyNameTextRect = enemyNameText.get_rect(
             center=(self.rect.center[0], self.rect.center[1]))
         screen.blit(enemyNameText, enemyNameTextRect)
+
+    def move(self, map: list[list[tuple[int, int, int]]]) -> None:
+        next_x = self.position.x + self.current_speed.x
+        next_y = self.position.y + self.current_speed.y
+
+        grid_pos_x = int(self.position.x // 1)
+        grid_pos_y = int(self.position.y // 1)
+
+        grid_pos_next_x = int(next_x // 1)
+        grid_pos_next_y = int(next_y // 1)
+
+        if (grid_pos_next_x >= len(map) or grid_pos_next_x < 0 or
+                map[grid_pos_next_x][grid_pos_y] == GRID_COLOR or map[grid_pos_next_x][grid_pos_y] == WALL_COLOR or
+                map[grid_pos_next_x][grid_pos_y] == FLOOR_NEXT_COL):
+            next_x = self.position.x
+        if (grid_pos_next_y >= len(map[0]) or grid_pos_next_y < 0 or
+                map[grid_pos_x][grid_pos_next_y] == GRID_COLOR or map[grid_pos_x][grid_pos_next_y] == WALL_COLOR or
+                map[grid_pos_x][grid_pos_next_y] == FLOOR_NEXT_COL):
+            next_y = self.position.y
+
+        self.position = pygame.Vector2(next_x, next_y)
 
     @staticmethod
     def spawn(possible_locations: list[pygame.Vector2]) -> Enemy:
@@ -320,11 +344,40 @@ powerup_types: list[type[Powerup]] = [SpeedBoost, DamageBoost, HealthBoost]
 class Player(Entity):
     inventory: Inventory
     powerups: list[Powerup]
+    current_speed: pygame.Vector2
 
     def __init__(self, health: float, position: pygame.Vector2, inventory: list[Item | None]):
-        super().__init__(health, position, pygame.Rect(screen_width * 39/80, screen_height * 39/80, screen_width / 40, screen_height / 40))
+        super().__init__(health, position, pygame.Vector2(0.75, 0.75))
         self.inventory = Inventory(inventory)
         self.powerups = []
+        self.current_speed = pygame.Vector2(0, 0.1)
+
+    def render(self, screen: pygame.Surface) -> None:
+        self.rect = pygame.Rect(
+            (tileWidth * self.position[0]) + get_camera_offset(self.position)[0] - (tileWidth * self.size.x),
+            (tileHeight * self.position[1]) + get_camera_offset(self.position)[1] - (tileHeight * self.size.y),
+            tileWidth * self.size.x, tileHeight * self.size.y)
+        pygame.draw.rect(screen, (0, 255, 0), self.rect)
+
+    def move(self, map: list[list[tuple[int, int, int]]]) -> None:
+        next_x = self.position.x + self.current_speed.x
+        next_y = self.position.y + self.current_speed.y
+
+        grid_pos_x = int(self.position.x // 1)
+        grid_pos_y = int(self.position.y // 1)
+
+        grid_pos_next_x = int(next_x // 1)
+        grid_pos_next_y = int(next_y // 1)
+
+        if (grid_pos_next_x >= len(map) or grid_pos_next_x < 0 or
+                map[grid_pos_next_x][grid_pos_y] == GRID_COLOR or map[grid_pos_next_x][grid_pos_y] == WALL_COLOR or map[grid_pos_next_x][grid_pos_y] == FLOOR_NEXT_COL):
+            next_x = self.position.x
+        if (grid_pos_next_y >= len(map[0]) or grid_pos_next_y < 0 or
+                map[grid_pos_x][grid_pos_next_y] == GRID_COLOR or map[grid_pos_x][grid_pos_next_y] == WALL_COLOR or map[grid_pos_x][grid_pos_next_y] == FLOOR_NEXT_COL):
+            next_y = self.position.y
+
+        self.position = pygame.Vector2(next_x, next_y)
+
 
     def attack(self, game_state: GameState) -> None:
 
@@ -400,7 +453,7 @@ class Inventory:
     def drop_item(self, slot: int, game_state: GameState) -> None:
         item = self.slots[slot].item
         if item is None: return None
-        item.position = game_state.player.position.copy()
+        item.position = game_state.player.position.copy() // 1
         game_state.spawned_items.append(item)
         self.slots[slot].item = None
         return None
