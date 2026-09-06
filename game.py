@@ -7,9 +7,9 @@ from typing import ClassVar
 
 import pygame
 
-from consts import tileWidth, tileHeight, screen_height, screen_width, font2, WALL_COLOR, FLOOR_COLOR, GRID_COLOR, \
-    FLOOR_NEXT_COL, PresetMaps
+from consts import tileWidth, tileHeight, screen_height, screen_width, font2, PresetMaps
 from game_ui import UIBar, draw_rect_alpha
+from world import World
 
 
 class Difficulty(Enum):
@@ -26,13 +26,13 @@ class GameState:
     bullets_fired: list[Bullet]
     wand_magic_fired: list[WandMagicThing]
     spawned_items: list[Item]
-    tile_map: list[list[tuple[int, int, int]]]
+    tile_map: World
     ui_bars: list[UIBar]
 
     @classmethod
     def new_game(cls, difficulty: Difficulty) -> GameState:
-        world_map = generate_map(PresetMaps, 5, 5)
-        ground_tiles = get_ground_tiles(world_map)
+        world_map = World.generate(PresetMaps, pygame.Vector2(5.0, 5.0))
+        ground_tiles = world_map.get_ground_tiles()
 
         player = Player(100, random.choice(ground_tiles), [None, None])
 
@@ -55,49 +55,6 @@ class GameState:
                 and self.player.inventory.slots[self.player.inventory.active_slot].item is not None):
             self.player.attack(self)
         self.player.inventory.handle_click(mouse_pos, self)
-
-def generate_map(preset_maps: list[list[str]], num_presets_x: int, num_presets_y: int) -> list[list[tuple[int, int, int]]]:
-    preset_len_x = len(preset_maps[0])
-    preset_len_y = len(preset_maps[0][0])
-
-    chosen_presets = [[random.choice(preset_maps) for _ in range(num_presets_x)] for _ in range(num_presets_y)]
-
-    world_map: list[list[tuple[int, int, int]]] = []
-
-    colour_map = {
-        "-": WALL_COLOR,
-        " ": FLOOR_COLOR
-    }
-
-    for y in range(preset_len_y * num_presets_y):
-        world_map.append([])
-        for x in range(preset_len_x * num_presets_x):
-            world_map[y].append(
-                colour_map[chosen_presets[y // preset_len_y][x // preset_len_x][x % preset_len_x][y % preset_len_y]]
-            )
-
-    return world_map
-
-def get_ground_tiles(tile_map: list[list[tuple[int, int, int]]]) -> list[pygame.Vector2]:
-    not_ground_colours = (GRID_COLOR, WALL_COLOR, FLOOR_NEXT_COL)
-    ground_tiles: list[pygame.Vector2] = []
-    for x in range(len(tile_map)):
-        for y in range(len(tile_map[0])):
-            if tile_map[x][y] in not_ground_colours: continue
-            if y != len(tile_map[0]) - 1 and tile_map[x][y + 1] == FLOOR_COLOR: continue
-            ground_tiles.append(pygame.Vector2(x, y))
-    return ground_tiles
-
-def get_ground_map(tile_map: list[list[tuple[int, int, int]]], ground_tiles: list[pygame.Vector2]) -> list[list[int]]:
-    ground_map: list[list[int]] = []
-    for x in range(len(tile_map)):
-        ground_map.append([])
-        for y in range(len(tile_map[0])):
-            if pygame.Vector2(x, y) in ground_tiles:
-                ground_map[x].append(1)
-            else:
-                ground_map[x].append(0)
-    return ground_map
 
 
 class Entity(ABC):
@@ -247,7 +204,7 @@ class Enemy(Entity, ABC):
             center=(self.rect.center[0], self.rect.center[1]))
         screen.blit(enemyNameText, enemyNameTextRect)
 
-    def move(self, map: list[list[tuple[int, int, int]]]) -> None:
+    def move(self, world: World) -> None:
         next_x = self.position.x + self.current_speed.x
         next_y = self.position.y + self.current_speed.y
 
@@ -257,13 +214,9 @@ class Enemy(Entity, ABC):
         grid_pos_next_x = int(next_x // 1)
         grid_pos_next_y = int(next_y // 1)
 
-        if (grid_pos_next_x >= len(map) or grid_pos_next_x < 0 or
-                map[grid_pos_next_x][grid_pos_y] == GRID_COLOR or map[grid_pos_next_x][grid_pos_y] == WALL_COLOR or
-                map[grid_pos_next_x][grid_pos_y] == FLOOR_NEXT_COL):
+        if world.colliding(pygame.Vector2(grid_pos_next_x, grid_pos_y), pygame.Vector2(grid_pos_next_x, grid_pos_y) + self.size):
             next_x = self.position.x
-        if (grid_pos_next_y >= len(map[0]) or grid_pos_next_y < 0 or
-                map[grid_pos_x][grid_pos_next_y] == GRID_COLOR or map[grid_pos_x][grid_pos_next_y] == WALL_COLOR or
-                map[grid_pos_x][grid_pos_next_y] == FLOOR_NEXT_COL):
+        if world.colliding(pygame.Vector2(grid_pos_x, grid_pos_next_y), pygame.Vector2(grid_pos_x, grid_pos_next_y) + self.size):
             next_y = self.position.y
 
         self.position = pygame.Vector2(next_x, next_y)
@@ -354,26 +307,20 @@ class Player(Entity):
 
     def render(self, screen: pygame.Surface) -> None:
         self.rect = pygame.Rect(
-            (tileWidth * self.position[0]) + get_camera_offset(self.position)[0] - (tileWidth * self.size.x),
-            (tileHeight * self.position[1]) + get_camera_offset(self.position)[1] - (tileHeight * self.size.y),
+            (tileWidth * self.position[0]) + get_camera_offset(self.position)[0],
+            (tileHeight * self.position[1]) + get_camera_offset(self.position)[1],
             tileWidth * self.size.x, tileHeight * self.size.y)
         pygame.draw.rect(screen, (0, 255, 0), self.rect)
 
-    def move(self, map: list[list[tuple[int, int, int]]]) -> None:
+    def move(self, world: World) -> None:
         next_x = self.position.x + self.current_speed.x
         next_y = self.position.y + self.current_speed.y
 
-        grid_pos_x = int(self.position.x // 1)
-        grid_pos_y = int(self.position.y // 1)
-
-        grid_pos_next_x = int(next_x // 1)
-        grid_pos_next_y = int(next_y // 1)
-
-        if (grid_pos_next_x >= len(map) or grid_pos_next_x < 0 or
-                map[grid_pos_next_x][grid_pos_y] == GRID_COLOR or map[grid_pos_next_x][grid_pos_y] == WALL_COLOR or map[grid_pos_next_x][grid_pos_y] == FLOOR_NEXT_COL):
+        if world.colliding(pygame.Vector2(next_x, self.position.y),
+                         pygame.Vector2(next_x, self.position.y) + self.size):
             next_x = self.position.x
-        if (grid_pos_next_y >= len(map[0]) or grid_pos_next_y < 0 or
-                map[grid_pos_x][grid_pos_next_y] == GRID_COLOR or map[grid_pos_x][grid_pos_next_y] == WALL_COLOR or map[grid_pos_x][grid_pos_next_y] == FLOOR_NEXT_COL):
+        if world.colliding(pygame.Vector2(self.position.x, next_y),
+                         pygame.Vector2(self.position.x, next_y) + self.size):
             next_y = self.position.y
 
         self.position = pygame.Vector2(next_x, next_y)
@@ -402,6 +349,7 @@ class Player(Entity):
             if shortestDistance[1] < 300 and shortestDistance[0] is not None:
                 attack_multiplier = 1 if not any(isinstance(x, DamageBoost) for x in game_state.player.powerups) else 2
                 weapon.fire(game_state, shortestDistance[0], self.position, attack_multiplier)
+        return None
 
 def get_grid_pos(position: pygame.Vector2, return_int: bool = True) -> pygame.Vector2:
     if return_int:

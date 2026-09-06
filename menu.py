@@ -58,7 +58,7 @@ class Button:
         pygame.draw.rect(screen, self.colour, self.rect)  # draws that rect onto the screen
         rendered_text = pygame.font.Font(None, 32).render(self.text, True, (0, 0, 0))  # creates the text to write on the screen
         textRect = rendered_text.get_rect(
-            center=self.rect.center)  # creates a pygame rect for the text on the screen in the middle of the button
+            center=self.rect.center)  # creates a pygame.Rect for the text on the screen in the middle of the button
         screen.blit(rendered_text, textRect)  # draws the text on the screen
 
     def on_click(self) -> None:

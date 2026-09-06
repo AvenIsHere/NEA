@@ -13,9 +13,7 @@ font2 = pygame.font.Font(None, 24)
 font3 = pygame.font.Font(None, 12)
 
 WALL_COLOR = (50, 50, 50)
-GRID_COLOR = (0, 0, 0)
 FLOOR_COLOR = (255, 255, 255)
-FLOOR_NEXT_COL = (0, 0, 255)
 
 gravity = -1.5
 

@@ -1,6 +1,3 @@
-# main.py
-
-# importing different libraries
 import dataclasses
 import math
 import random
@@ -8,101 +5,29 @@ import sys
 from threading import Thread
 import jsonpickle  # type: ignore[import-untyped]
 
-import pathfinding  # type: ignore[import-untyped]
 import pygame
-from pathfinding.core.diagonal_movement import DiagonalMovement  # type: ignore[import-untyped]
-from pathfinding.core.grid import Grid  # type: ignore[import-untyped]
-from pathfinding.finder.a_star import AStarFinder  # type: ignore[import-untyped]
 from pygame.locals import QUIT
 
-from consts import font2, font, font3, screen_width, tileWidth, screen_height, tileHeight, GRID_COLOR, WALL_COLOR, \
-    FLOOR_NEXT_COL, gravity
+from consts import font2, font, font3, screen_width, tileWidth, screen_height, tileHeight
 from enemy_pathfinding import PathfindingThread
 from file import GameFile, save_game
-from game import get_ground_map, get_ground_tiles, GameState, Wizard, Knight, Weapon, HealthBoost, Powerup, Player, \
-    Enemy, DamageBoost, SpeedBoost, get_camera_offset
+from game import GameState, Knight, Weapon, HealthBoost, Powerup, Player, \
+    Enemy, DamageBoost, get_camera_offset
 from game_ui import UIBar, draw_rect_alpha
 from menu import MainMenu, Button
 
-# Pygame initialisation
+# Pygame initialization
 pygame.init()
 pygame.joystick.init()
 joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
 screen = pygame.display.set_mode((1152, 648))
 pygame.display.set_caption('NEA')
 
-# TODO: Fix globals needed for pathfinding
+# TODO: Replace remaining globals
 tileRect: list[list[pygame.Rect]]
-enemiesToMove: list[tuple[int, tuple[int, int]]]
-pathGrid: list[str]
-grid: pathfinding.core.grid.Grid
-
-
-def do_pathfinding(game_state: GameState) -> None:
-    global enemiesToMove, grid, pathGrid, pathTicks, onGroundMap
-    if pathTicks == 0:
-        enemiesToMove = []
-        grid = Grid(matrix=onGroundMap)
-        for x in range(len(game_state.enemies)):
-            if not (abs(game_state.player.position[0] - int(
-                    game_state.enemies[x].position[0] // 1)) <= 21 and abs(
-                    game_state.player.position[1] - int(game_state.enemies[x].position[1] // 1)) <= 21):
-                continue
-            start = grid.node(int(game_state.enemies[x].position[0] // 1),
-                              int(game_state.enemies[x].position[1] // 1))
-            end = grid.node(int(game_state.player.position[0]),
-                            int(game_state.player.position[1]))
-            finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
-            path, runs = finder.find_path(start, end, grid)
-            pathGrid = grid.grid_str(path=path, start=start, end=end).split('\n')
-            if isinstance(game_state.enemies[x], Wizard):
-                for l in range(len(pathGrid)):
-                    if 'se' in pathGrid[l] and not '#se' in pathGrid[l]:
-                        n = int(game_state.player.position[0] // 1) - 2
-                        enemiesToMove.append((x, (n, l)))
-                    elif 'es' in pathGrid[l] and not 'es#' in pathGrid[l]:
-                        n = int(game_state.player.position[0] // 1) + 2
-                        enemiesToMove.append((x, (n, l)))
-                    elif 'sxxe' in pathGrid[l] or 'exxs' in pathGrid[l]:
-                        pass
-                    elif 'x' in pathGrid[l]:
-                        sLocation, eLocation = None, None
-                        for z in range(len(pathGrid[l])):
-                            if pathGrid[l][z] == 's':
-                                sLocation = z
-                        for z in range(len(pathGrid[l])):
-                            if pathGrid[l][z] == 'e':
-                                eLocation = z
-                        if sLocation is None or eLocation is None: continue
-                        if sLocation < eLocation:
-                            n = int(game_state.player.position[0] // 1) - 1
-                        else:
-                            n = int(game_state.player.position[0] // 1) + 1
-                        enemiesToMove.append((x, (n, l)))
-            elif isinstance(game_state.enemies[x], Knight):
-                for l in range(len(pathGrid)):
-                    if 'x' in pathGrid[l] or 'se' in pathGrid[l] or 'es' in pathGrid[l]:
-                        n = None
-                        for i in reversed(range(len(pathGrid[l]))):
-                            if pathGrid[l][i] == 'x' or (pathGrid[l][i] == 'e' and (
-                                    pathGrid[l][i - 1] == 's' or pathGrid[l][i + 1] == 's')):
-                                n = int(game_state.player.position[0])
-                        if n is None: continue
-                        enemiesToMove.append((x, (n, l)))
-        pathTicks = 50
-    if enemiesToMove:
-        for x in range(len(enemiesToMove)):
-            if game_state.enemies[enemiesToMove[x][0]].position != pygame.Vector2(enemiesToMove[x][1]):
-                if game_state.enemies[enemiesToMove[x][0]].position[0] // 1 > enemiesToMove[x][1][0] // 1:
-                    game_state.enemies[enemiesToMove[x][0]].position[0] -= 0.05
-                if game_state.enemies[enemiesToMove[x][0]].position[0] // 1 < enemiesToMove[x][1][0] // 1:
-                    game_state.enemies[enemiesToMove[x][0]].position[0] += 0.05
-    pathTicks -= 1
-
-
 timeSinceSpawnHealthBoosts = 0
-
 attackMultiplierEnemies = 1
+pathfindingThread: PathfindingThread
 
 
 def render_UI(game_state: GameState) -> None:
@@ -113,9 +38,6 @@ def render_UI(game_state: GameState) -> None:
         ui_bar.render(screen, pygame.Vector2(20, 20 + (i * 50)))
 
 
-pathfindingThread: PathfindingThread
-
-
 @dataclasses.dataclass
 class RenderedElements:
     tiles_rendered: list[list[pygame.Rect]]
@@ -123,13 +45,13 @@ class RenderedElements:
 
 def render_map(game_state: GameState) -> list[list[pygame.Rect]]:
     tiles_rendered: list[list[pygame.Rect]] = []
-    for x, colour in enumerate(game_state.tile_map, start=0):
+    for x, colour in enumerate(game_state.tile_map.grid, start=0):
         tiles_rendered.append([])
         for y, tileColour in enumerate(colour, start=0):
-            tiles_rendered[x].append(pygame.Rect(((tileWidth) * (x)) + get_camera_offset(game_state.player.position)[0],
-                                                 ((tileHeight) * (y)) + get_camera_offset(game_state.player.position)[1],
+            tiles_rendered[x].append(pygame.Rect((tileWidth * x) + get_camera_offset(game_state.player.position)[0],
+                                                 (tileHeight * y) + get_camera_offset(game_state.player.position)[1],
                                                  tileWidth + 1, tileHeight + 1))
-            pygame.draw.rect(screen, tileColour, tiles_rendered[x][y])
+            pygame.draw.rect(screen, tileColour.colour, tiles_rendered[x][y])
     return tiles_rendered
 
 
@@ -206,15 +128,12 @@ def wonGame(game_state: GameState) -> None:
 
 def respawn(game_state: GameState) -> None:
     game_state.player.health = 100
-    game_state.player.position = random.choice(get_ground_tiles(game_state.tile_map))
+    game_state.player.position = random.choice(game_state.tile_map.get_ground_tiles())
     game_state.enemies = [Enemy.spawn(onGround) for _ in range(40)]
     game_state.ui_bars = [
         UIBar("Health remaining", (200, 25, 25), lambda: game_state.player.health / 100),
         UIBar("Enemies remaining", (128, 128, 128), lambda: len(game_state.enemies) / 40)
     ]
-
-
-attackStrength = random.randint(6, 9)
 
 
 def manageBullets(given_state: GameState) -> None:
@@ -223,10 +142,10 @@ def manageBullets(given_state: GameState) -> None:
         if isinstance(magic.target, Player):
             target_pos = magic.target.position
             dx, dy = (target_pos[0] - (magic.position[0]), target_pos[1] - (magic.position[1]))
-            stepx, stepy = (dx / 25, dy / 25)
-            magic.position = pygame.Vector2(magic.position[0] + stepx, magic.position[1] + stepy)
-            magic.rect = pygame.Rect(((tileWidth) * (magic.position[0])) + given_state.player.position[0],
-                                     ((tileHeight) * (magic.position[1])) + given_state.player.position[1],
+            step_x, step_y = (dx / 25, dy / 25)
+            magic.position = pygame.Vector2(magic.position[0] + step_x, magic.position[1] + step_y)
+            magic.rect = pygame.Rect((tileWidth * magic.position[0]) + given_state.player.position[0],
+                                     (tileHeight * magic.position[1]) + given_state.player.position[1],
                                      magic.target.rect.width / 4,
                                      magic.target.rect.width / 4)
             pygame.draw.circle(screen, (100, 255, 255), magic.rect.center, magic.rect.width)
@@ -243,10 +162,10 @@ def manageBullets(given_state: GameState) -> None:
                 given_state.wand_magic_fired.remove(magic)
         elif isinstance(magic.target, Enemy):
             dx, dy = (magic.target.position[0] - (magic.position[0]), magic.target.position[1] - (magic.position[1]))
-            stepx, stepy = (dx / 25, dy / 25)
-            magic.position = pygame.Vector2(magic.position[0] + stepx, magic.position[1] + stepy)
-            magic.rect = pygame.Rect(((tileWidth) * (magic.position[0])) + given_state.player.position[0],
-                                     ((tileHeight) * (magic.position[1])) + given_state.player.position[1],
+            step_x, step_y = (dx / 25, dy / 25)
+            magic.position = pygame.Vector2(magic.position[0] + step_x, magic.position[1] + step_y)
+            magic.rect = pygame.Rect((tileWidth * magic.position[0]) + given_state.player.position[0],
+                                     (tileHeight * magic.position[1]) + given_state.player.position[1],
                                      magic.target.rect.width / 4,
                                      magic.target.rect.width / 4)
             pygame.draw.circle(screen, (100, 255, 255), magic.rect.center, magic.rect.width)
@@ -260,8 +179,8 @@ def manageBullets(given_state: GameState) -> None:
                         magic.target.health = int((magic.target.health * (3 / 4)) // 1)
                 given_state.wand_magic_fired.remove(magic)
     for bullet in given_state.bullets_fired:
-        bulletRect = pygame.Rect(((tileWidth) * (bullet.position[0])) + given_state.player.position[0],
-                                 ((tileHeight) * (bullet.position[1])) + given_state.player.position[1],
+        bulletRect = pygame.Rect((tileWidth * bullet.position[0]) + given_state.player.position[0],
+                                 (tileHeight * bullet.position[1]) + given_state.player.position[1],
                                  10, 10)
         bulletSurface = pygame.Surface((bulletRect.width, bulletRect.height))
         bulletSurface = pygame.transform.rotate(bulletSurface, math.degrees(bullet.direction))
@@ -283,7 +202,6 @@ def manageBullets(given_state: GameState) -> None:
                 breakForLoop = True
                 break
             if breakForLoop:
-                breakForLoop = False
                 break
         else:
             if bulletSurfaceRect.colliderect(given_state.player.rect):
@@ -292,15 +210,13 @@ def manageBullets(given_state: GameState) -> None:
         for y, tileRectRow in enumerate(tileRect):
             for z, tileRectRowColumn in enumerate(tileRectRow):
                 if bulletSurfaceRect.colliderect(tileRect[y][z]) and (
-                        given_state.tile_map[y][z] == GRID_COLOR or given_state.tile_map[y][z] == WALL_COLOR or given_state.tile_map[y][
-                    z] == FLOOR_NEXT_COL):
+                        given_state.tile_map.grid[y][z].collision):
                     given_state.bullets_fired.remove(bullet)
                     breakForLoop = True
                     break
             if breakForLoop:
                 break
         if breakForLoop:
-            breakForLoop = False
             break
         if bullet.position[0] <= 0:
             given_state.bullets_fired.remove(bullet)
@@ -350,8 +266,8 @@ def render_items(game_state: GameState) -> None:
     width = screen_width / 30
     height = screen_height / 30
     for x, item in enumerate(game_state.spawned_items):
-        item.rect = pygame.Rect(((tileWidth) * (item.position[0])) + get_camera_offset(game_state.player.position)[0],
-                                   ((tileHeight) * (item.position[1])) + get_camera_offset(game_state.player.position)[
+        item.rect = pygame.Rect((tileWidth * item.position[0]) + get_camera_offset(game_state.player.position)[0],
+                                   (tileHeight * item.position[1]) + get_camera_offset(game_state.player.position)[
                                        1] + tileHeight - height + 1, width, height)
         if isinstance(item, Powerup):
             pygame.draw.rect(screen, item.colour, item.rect)
@@ -403,22 +319,6 @@ while True:
         if event.type == pygame.MOUSEBUTTONDOWN:
             if game_file is not None:
                 game_file.game_state.handle_click(pygame.Vector2(pygame.mouse.get_pos()))
-        if event.type == pygame.JOYBUTTONDOWN:
-            if event.button == 0:
-                if not jumping:
-                    jumping = True
-                    jumpCount = 0
-            if event.button == 7:
-                if game_file is not None: save_game(game_file)
-                pygame.quit()
-                sys.exit()
-            if event.button == 2:
-                CollectItem = True
-        if event.type == pygame.JOYBUTTONUP:
-            if event.button == 0:
-                if jumping:
-                    jumping = False
-                    jumpCount = 0
         if event.type == QUIT:
             if game_file is not None: save_game(game_file)
             pygame.quit()
@@ -438,7 +338,7 @@ while True:
                 if event.key == pygame.K_a:
                     game_file.game_state.player.current_speed.x -= 0.016
                 if event.key == pygame.K_h:
-                    game_file.game_state.player.position = random.choice(get_ground_tiles(game_file.game_state.tile_map))
+                    game_file.game_state.player.position = random.choice(game_file.game_state.tile_map.get_ground_tiles())
                 if event.key == pygame.K_e:
                     CollectItem = True
             # if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
@@ -460,13 +360,9 @@ while True:
         main_menu.render(screen)
         game_file = main_menu.get_game()
         if game_file:
-            pathTicks = 0
-            onGround = get_ground_tiles(game_file.game_state.tile_map)
-            onGroundMap = get_ground_map(game_file.game_state.tile_map, onGround)
-            pathfindingThread = PathfindingThread(game_file.game_state, onGround)
-
-
-    keys = pygame.key.get_pressed()
+            onGround = game_file.game_state.tile_map.get_ground_tiles()
+            onGroundMap = game_file.game_state.tile_map.get_ground_map(onGround)
+            pathfindingThread = PathfindingThread(game_file.game_state, onGroundMap)
 
     if game_file is not None:
         render_data = render_frame(game_file.game_state)
