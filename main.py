@@ -81,7 +81,8 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
             enemy.attack(game_state)
         enemy.weapon.time_since_attack += 1
 
-    manageBullets(game_state)
+    manage_bullets(game_state)
+    manage_magic(game_state)
 
     for slot in game_state.player.inventory.slots:
         if isinstance(slot.item, Weapon): slot.item.time_since_attack += 1
@@ -130,51 +131,38 @@ def respawn(game_state: GameState) -> None:
     ]
 
 
-def manageBullets(given_state: GameState) -> None:
-    breakForLoop = False
-    for magic in given_state.wand_magic_fired:
+def manage_magic(game_state: GameState) -> None:
+    for magic in game_state.wand_magic_fired:
         if isinstance(magic.target, Player):
             target_pos = magic.target.position
             dx, dy = (target_pos[0] - (magic.position[0]), target_pos[1] - (magic.position[1]))
-            step_x, step_y = (dx / 25, dy / 25)
-            magic.position = pygame.Vector2(magic.position[0] + step_x, magic.position[1] + step_y)
-            magic.rect = pygame.Rect((tileWidth * magic.position[0]) + given_state.player.position[0],
-                                     (tileHeight * magic.position[1]) + given_state.player.position[1],
-                                     magic.target.rect.width / 4,
-                                     magic.target.rect.width / 4)
-            pygame.draw.circle(screen, (100, 255, 255), magic.rect.center, magic.rect.width)
-            magic.age += 1
-            if magic.age >= 250:
-                given_state.wand_magic_fired.remove(magic)
-                continue
-            if magic.rect.colliderect(magic.target.rect):
-                if magic.target.health <= 1:
-                    magic.target.health = 0
-                else:
-                    magic.target.health = int(
-                        (magic.target.health * ((5 / 6) + ((1 / 20) * (1 / attackMultiplierEnemies)))) // 1)
-                given_state.wand_magic_fired.remove(magic)
         elif isinstance(magic.target, Enemy):
             dx, dy = (magic.target.position[0] - (magic.position[0]), magic.target.position[1] - (magic.position[1]))
-            step_x, step_y = (dx / 25, dy / 25)
-            magic.position = pygame.Vector2(magic.position[0] + step_x, magic.position[1] + step_y)
-            magic.rect = pygame.Rect((tileWidth * magic.position[0]) + given_state.player.position[0],
-                                     (tileHeight * magic.position[1]) + given_state.player.position[1],
-                                     magic.target.rect.width / 4,
-                                     magic.target.rect.width / 4)
-            pygame.draw.circle(screen, (100, 255, 255), magic.rect.center, magic.rect.width)
-            if magic.rect.colliderect(magic.target.rect):
-                if magic.target.health <= 1:
-                    given_state.enemies.remove(magic.target)
-                else:
-                    if any(isinstance(x, DamageBoost) for x in given_state.player.powerups):
-                        magic.target.health = int((magic.target.health * (2 / 4)) // 1)
-                    else:
-                        magic.target.health = int((magic.target.health * (3 / 4)) // 1)
-                given_state.wand_magic_fired.remove(magic)
+        magic.age += 1
+        if magic.age >= 250:
+            game_state.wand_magic_fired.remove(magic)
+            continue
+        if magic.rect.colliderect(magic.target.rect):
+            if magic.target.health <= 1:
+                magic.target.health = 0
+            else:
+                magic.target.health = int(
+                    (magic.target.health * ((5 / 6) + (1 / 20))) // 1)
+            game_state.wand_magic_fired.remove(magic)
+        step_x, step_y = (dx / 25, dy / 25)
+        magic.position = pygame.Vector2(magic.position[0] + step_x, magic.position[1] + step_y)
+        magic.rect = pygame.Rect((tileWidth * magic.position[0]) + get_camera_offset(game_state.player.position).x,
+                                 (tileHeight * magic.position[1]) + get_camera_offset(game_state.player.position).y,
+                                 magic.target.rect.width / 4,
+                                 magic.target.rect.width / 4)
+        pygame.draw.circle(screen, (100, 255, 255), magic.rect.center, magic.rect.width)
+
+def manage_bullets(given_state: GameState) -> None:
+    breakForLoop = False
+
     for bullet in given_state.bullets_fired:
-        bulletRect = pygame.Rect((tileWidth * bullet.position[0]) + given_state.player.position[0],
-                                 (tileHeight * bullet.position[1]) + given_state.player.position[1],
+        bulletRect = pygame.Rect((tileWidth * bullet.position[0]) + get_camera_offset(given_state.player.position).x,
+                                 (tileHeight * bullet.position[1]) + get_camera_offset(given_state.player.position).y,
                                  10, 10)
         bulletSurface = pygame.Surface((bulletRect.width, bulletRect.height))
         bulletSurface = pygame.transform.rotate(bulletSurface, math.degrees(bullet.direction))
