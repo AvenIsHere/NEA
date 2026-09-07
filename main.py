@@ -2,7 +2,6 @@ import dataclasses
 import math
 import random
 import sys
-from threading import Thread
 import jsonpickle  # type: ignore[import-untyped]
 
 import pygame
@@ -18,8 +17,6 @@ from menu import MainMenu, Button
 
 # Pygame initialization
 pygame.init()
-pygame.joystick.init()
-joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
 screen = pygame.display.set_mode((1152, 648))
 pygame.display.set_caption('NEA')
 
@@ -72,11 +69,7 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
     game_state.player.move(game_state.tile_map)
 
     tileRect = render_data.tiles_rendered
-    if CollectItem: collect_item(game_state)
-
-    if not pathfindingThread.thread.is_alive():
-        pathfindingThread.thread = Thread(target=pathfindingThread.do_tick)
-        pathfindingThread.thread.start()
+    if pygame.key.get_pressed()[pygame.K_e]: collect_item(game_state)
 
     for enemy in game_state.enemies:
         enemy.move(game_state.tile_map)
@@ -98,7 +91,7 @@ def game_frame(game_state: GameState, render_data: RenderedElements) -> None:
         if isinstance(item, HealthBoost)
     )
     if health_boost_num < 10 and timeSinceSpawnHealthBoosts >= 600:
-        game_state.spawned_items.append(Powerup.spawn(onGround))
+        game_state.spawned_items.append(Powerup.spawn(game_state.tile_map.get_ground_tiles()))
         timeSinceSpawnHealthBoosts = 0
     timeSinceSpawnHealthBoosts += 1
 
@@ -128,8 +121,9 @@ def wonGame(game_state: GameState) -> None:
 
 def respawn(game_state: GameState) -> None:
     game_state.player.health = 100
-    game_state.player.position = random.choice(game_state.tile_map.get_ground_tiles())
-    game_state.enemies = [Enemy.spawn(onGround) for _ in range(40)]
+    ground_tiles = game_state.tile_map.get_ground_tiles()
+    game_state.player.position = random.choice(ground_tiles)
+    game_state.enemies = [Enemy.spawn(ground_tiles) for _ in range(40)]
     game_state.ui_bars = [
         UIBar("Health remaining", (200, 25, 25), lambda: game_state.player.health / 100),
         UIBar("Enemies remaining", (128, 128, 128), lambda: len(game_state.enemies) / 40)
@@ -286,6 +280,8 @@ def render_items(game_state: GameState) -> None:
             screen.blit(itemText, itemTextRect)
             screen.blit(itemText2, itemTextRect2)
 
+jumping = False
+jumpCount: int = 0
 
 def jump(game_state: GameState) -> None:
     global jumpCount, jumping
@@ -295,74 +291,50 @@ def jump(game_state: GameState) -> None:
     game_state.player.current_speed += move
     jumpCount += 1
 
-
-jumping = False
-
 def render_enemies(given_state: GameState) -> None:
     for enemy in given_state.enemies:
         enemy.render(given_state, screen)
 
-CollectItem = False
+def start_pathfinding(game_state: GameState) -> None:
+    global pathfindingThread
+    ground_tiles = game_state.tile_map.get_ground_tiles()
+    ground_tile_map = game_state.tile_map.get_ground_map(ground_tiles)
+    pathfindingThread = PathfindingThread(game_state, ground_tile_map)
 
 clock = pygame.time.Clock()
-
 main_menu = MainMenu()
 game_file: GameFile | None = None
 
-jumpCount: int = 0
-
 while True:
-    pygame.display.update()
 
     for event in pygame.event.get():
-        if game_file is None: main_menu.handle_input(event)
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if game_file is not None:
-                game_file.game_state.handle_click(pygame.Vector2(pygame.mouse.get_pos()))
-        if event.type == QUIT:
+        if event.type == QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
             if game_file is not None: save_game(game_file)
             pygame.quit()
             sys.exit()
+        if game_file is None:
+            main_menu.handle_input(event)
+            continue
         if event.type == pygame.KEYDOWN:
-            if game_file is not None:
-                if event.key == pygame.K_ESCAPE:
-                    save_game(game_file)
-                    pygame.quit()
-                    sys.exit()
-                if event.key == pygame.K_SPACE:
-                    if not jumping:
-                        jumping = True
-                        jumpCount = 0
-                if event.key == pygame.K_d:
-                    game_file.game_state.player.current_speed.x += 0.016
-                if event.key == pygame.K_a:
-                    game_file.game_state.player.current_speed.x -= 0.016
-                if event.key == pygame.K_h:
-                    game_file.game_state.player.position = random.choice(game_file.game_state.tile_map.get_ground_tiles())
-                if event.key == pygame.K_e:
-                    CollectItem = True
-            # if event.key == pygame.K_F11: # - disabled due to issues with collision and player position.
-            #     toggleFullscreen()
+            if event.key == pygame.K_SPACE:
+                if not jumping:
+                    jumping = True
+                    jumpCount = 0
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_SPACE:
-                if game_file is not None and jumping:
-                    game_file.game_state.player.current_speed.y -= -0.1 * 0.05 * (40 if jumpCount > 40 else jumpCount)
-                    jumping = False
-                    jumpCount = 0
-            if game_file is not None:
-                if event.key == pygame.K_d:
-                    game_file.game_state.player.current_speed.x -= 0.016
-                if event.key == pygame.K_a:
-                    game_file.game_state.player.current_speed.x += 0.016
+                if not jumping: continue
+                game_file.game_state.player.current_speed.y -= -0.1 * 0.05 * (40 if jumpCount > 40 else jumpCount)
+                jumping = False
+                jumpCount = 0
+        game_file.game_state.handle_input(event)
+
+    pygame.display.update()
     screen.fill((20, 20, 20))
 
     if game_file is None:
         main_menu.render(screen)
         game_file = main_menu.get_game()
-        if game_file:
-            onGround = game_file.game_state.tile_map.get_ground_tiles()
-            onGroundMap = game_file.game_state.tile_map.get_ground_map(onGround)
-            pathfindingThread = PathfindingThread(game_file.game_state, onGroundMap)
+        if game_file: start_pathfinding(game_file.game_state)
 
     if game_file is not None:
         render_data = render_frame(game_file.game_state)
@@ -375,8 +347,5 @@ while True:
         if not game_file.game_state.player.health <= 0:
             if jumping:
                 jump(game_file.game_state)
-
-    if CollectItem:
-        CollectItem = False
 
     clock.tick(60)

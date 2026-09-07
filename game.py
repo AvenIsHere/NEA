@@ -56,6 +56,22 @@ class GameState:
             self.player.attack(self)
         self.player.inventory.handle_click(mouse_pos, self)
 
+    def handle_input(self, event: pygame.Event) -> None:
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            self.handle_click(pygame.Vector2(pygame.mouse.get_pos()))
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_d:
+                self.player.current_speed.x += 0.016
+            if event.key == pygame.K_a:
+                self.player.current_speed.x -= 0.016
+            if event.key == pygame.K_h:
+                self.player.position = random.choice(self.tile_map.get_ground_tiles())
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_d:
+                self.player.current_speed.x -= 0.016
+            if event.key == pygame.K_a:
+                self.player.current_speed.x += 0.016
+
 
 class Entity(ABC):
     health: float
